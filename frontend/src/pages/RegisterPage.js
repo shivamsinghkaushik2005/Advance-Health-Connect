@@ -1,0 +1,1039 @@
+import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Link, useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import {
+  Container,
+  Box,
+  Typography,
+  TextField,
+  Button,
+  Paper,
+  Grid,
+  Divider,
+  Alert,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Select,
+  Stepper,
+  Step,
+  StepLabel,
+  Collapse,
+  Card,
+  CardContent,
+  IconButton,
+  Chip,
+  Stack,
+  InputAdornment,
+  Autocomplete
+} from '@mui/material';
+import {
+  Add as AddIcon,
+  Delete as DeleteIcon,
+  Person as PersonIcon,
+  MedicalServices as MedicalServicesIcon,
+  School as SchoolIcon,
+  Work as WorkIcon,
+  Language as LanguageIcon,
+  Schedule as ScheduleIcon,
+  AttachMoney as AttachMoneyIcon
+} from '@mui/icons-material';
+import useAuth from '../hooks/useAuth';
+
+// Common specialties for selection
+const SPECIALTIES = [
+  'Cardiologist',
+  'Dermatologist',
+  'Endocrinologist',
+  'Gastroenterologist',
+  'General Physician',
+  'Gynecologist',
+  'Neurologist',
+  'Oncologist',
+  'Ophthalmologist',
+  'Orthopedic',
+  'Pediatrician',
+  'Psychiatrist',
+  'Pulmonologist',
+  'Radiologist',
+  'Urologist'
+];
+
+// Languages spoken
+const LANGUAGES = [
+  'English',
+  'Hindi',
+  'Bhojpuri',
+  'Bengali',
+  'Maithili',
+  'Urdu',
+  'Punjabi',
+  'Tamil',
+  'Telugu',
+  'Marathi',
+  'Gujarati',
+  'Kannada',
+  'Malayalam',
+  'Odia'
+];
+
+// Days of the week
+const DAYS_OF_WEEK = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday'
+];
+
+const RegisterPage = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const { register, error: authError } = useAuth();
+  
+  const [activeStep, setActiveStep] = useState(0);
+  
+  const [formData, setFormData] = useState({
+    name: '',
+    email: '',
+    phoneNumber: '',
+    password: '',
+    confirmPassword: '',
+    userType: 'patient',
+    // Doctor specific fields
+    speciality: '',
+    licenseNumber: '',
+    fees: '',
+    education: [{ degree: '', institution: '', year: '' }],
+    experience: [{ hospital: '', position: '', duration: '' }],
+    languages: ['English'],
+    availability: [
+      { 
+        day: 'Monday', 
+        slots: [{ startTime: '09:00', endTime: '17:00', isBooked: false }] 
+      }
+    ]
+  });
+  
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [debugInfo, setDebugInfo] = useState(null);
+  
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    setFormData({
+      ...formData,
+      [name]: value,
+    });
+  };
+  
+  const handleEducationChange = (index, field, value) => {
+    const updatedEducation = formData.education.map((edu, i) => 
+      i === index ? { ...edu, [field]: value } : edu
+    );
+    
+    setFormData({
+      ...formData,
+      education: updatedEducation
+    });
+  };
+  
+  const handleExperienceChange = (index, field, value) => {
+    const updatedExperience = formData.experience.map((exp, i) => 
+      i === index ? { ...exp, [field]: value } : exp
+    );
+    
+    setFormData({
+      ...formData,
+      experience: updatedExperience
+    });
+  };
+  
+  const handleAvailabilityChange = (index, field, value) => {
+    const updatedAvailability = formData.availability.map((avail, i) => 
+      i === index ? { ...avail, [field]: value } : avail
+    );
+    
+    setFormData({
+      ...formData,
+      availability: updatedAvailability
+    });
+  };
+  
+  const handleSlotChange = (dayIndex, slotIndex, field, value) => {
+    const updatedAvailability = [...formData.availability];
+    updatedAvailability[dayIndex].slots[slotIndex][field] = value;
+    
+    setFormData({
+      ...formData,
+      availability: updatedAvailability
+    });
+  };
+  
+  const addEducation = () => {
+    setFormData({
+      ...formData,
+      education: [...formData.education, { degree: '', institution: '', year: '' }]
+    });
+  };
+  
+  const removeEducation = (index) => {
+    if (formData.education.length > 1) {
+      const updatedEducation = formData.education.filter((_, i) => i !== index);
+      setFormData({
+        ...formData,
+        education: updatedEducation
+      });
+    }
+  };
+  
+  const addExperience = () => {
+    setFormData({
+      ...formData,
+      experience: [...formData.experience, { hospital: '', position: '', duration: '' }]
+    });
+  };
+  
+  const removeExperience = (index) => {
+    if (formData.experience.length > 1) {
+      const updatedExperience = formData.experience.filter((_, i) => i !== index);
+      setFormData({
+        ...formData,
+        experience: updatedExperience
+      });
+    }
+  };
+  
+  const addDay = () => {
+    // Find days not already in the availability
+    const existingDays = formData.availability.map(a => a.day);
+    const availableDays = DAYS_OF_WEEK.filter(day => !existingDays.includes(day));
+    
+    if (availableDays.length > 0) {
+      setFormData({
+        ...formData,
+        availability: [
+          ...formData.availability, 
+          { 
+            day: availableDays[0], 
+            slots: [{ startTime: '09:00', endTime: '17:00', isBooked: false }] 
+          }
+        ]
+      });
+    }
+  };
+  
+  const removeDay = (index) => {
+    if (formData.availability.length > 1) {
+      const updatedAvailability = formData.availability.filter((_, i) => i !== index);
+      setFormData({
+        ...formData,
+        availability: updatedAvailability
+      });
+    }
+  };
+  
+  const addSlot = (dayIndex) => {
+    const updatedAvailability = [...formData.availability];
+    updatedAvailability[dayIndex].slots.push({ startTime: '09:00', endTime: '17:00', isBooked: false });
+    
+    setFormData({
+      ...formData,
+      availability: updatedAvailability
+    });
+  };
+  
+  const removeSlot = (dayIndex, slotIndex) => {
+    if (formData.availability[dayIndex].slots.length > 1) {
+      const updatedAvailability = [...formData.availability];
+      updatedAvailability[dayIndex].slots = updatedAvailability[dayIndex].slots.filter((_, i) => i !== slotIndex);
+      
+      setFormData({
+        ...formData,
+        availability: updatedAvailability
+      });
+    }
+  };
+  
+  const handleLanguagesChange = (event, newValue) => {
+    setFormData({
+      ...formData,
+      languages: newValue
+    });
+  };
+  
+  // Direct API call for debugging
+  const directRegister = async (userData) => {
+    try {
+      console.log('Making direct API call to /api/auth/register with data:', {
+        ...userData,
+        password: '***HIDDEN***'
+      });
+
+      const response = await axios.post('/api/auth/register', userData, {
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        timeout: 30000 // Increase timeout to 30 seconds
+      });
+      
+      console.log('Direct API response:', response.data);
+      return response.data;
+    } catch (error) {
+      console.error('Direct registration error details:', error);
+      
+      if (error.response) {
+        // The request was made and the server responded with a status code
+        console.error('Server responded with error:', error.response.data);
+        console.error('Status code:', error.response.status);
+      } else if (error.request) {
+        // The request was made but no response was received
+        console.error('No response received from server');
+      } else {
+        // Something happened in setting up the request
+        console.error('Error setting up request:', error.message);
+      }
+      
+      setDebugInfo({
+        type: 'Direct API Error',
+        status: error.response?.status,
+        message: error.message,
+        response: error.response?.data
+      });
+      throw error;
+    }
+  };
+  
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    
+    // Basic validation
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords don't match");
+      return;
+    }
+    
+    // Validate doctor-specific fields if user type is doctor
+    if (formData.userType === 'doctor') {
+      if (!formData.speciality || !formData.licenseNumber || !formData.fees) {
+        setError("Please fill in all required doctor information");
+        return;
+      }
+    }
+    
+    setError('');
+    setLoading(true);
+    setDebugInfo(null);
+    
+    try {
+      console.log('Sending registration data:', {
+        ...formData,
+        password: '***HIDDEN***' // Hide the password in logs
+      });
+      
+      // Create the registration data
+      const userData = {
+          name: formData.name, 
+          email: formData.email,
+          password: formData.password,
+          phoneNumber: formData.phoneNumber,
+          userType: formData.userType
+      };
+      
+      // Add doctor-specific data if registering as a doctor
+      let doctorData = null;
+      if (formData.userType === 'doctor') {
+        doctorData = {
+          speciality: formData.speciality,
+          licenseNumber: formData.licenseNumber,
+          fees: parseFloat(formData.fees),
+          education: formData.education,
+          experience: formData.experience,
+          languages: formData.languages,
+          availability: formData.availability
+        };
+      }
+      
+      // Try the regular registration through context first
+      try {
+        // Register the user
+        const registeredUser = await register(userData);
+        
+        // If doctor, create doctor profile
+        if (formData.userType === 'doctor' && doctorData) {
+          try {
+            doctorData.userId = registeredUser._id;
+            await axios.post('/api/doctors', doctorData);
+          } catch (doctorError) {
+            console.error('Error creating doctor profile:', doctorError);
+            setError('User registered but doctor profile creation failed. Please contact support.');
+            setLoading(false);
+            return;
+          }
+        }
+        
+        navigate('/dashboard');
+      } catch (contextError) {
+        console.error('Context registration error:', contextError);
+        
+        // If context registration fails, try direct API call
+        setDebugInfo({
+          type: 'Context Error',
+          message: contextError.message,
+          response: contextError.response?.data
+        });
+        
+        // Try direct registration as a fallback
+        console.log('Attempting direct registration...');
+        const directResult = await directRegister(userData);
+        
+        // If doctor, create doctor profile
+        if (formData.userType === 'doctor' && doctorData) {
+          try {
+            doctorData.userId = directResult._id;
+            await axios.post('/api/doctors', doctorData);
+          } catch (doctorError) {
+            console.error('Error creating doctor profile:', doctorError);
+            setError('User registered but doctor profile creation failed. Please contact support.');
+            setLoading(false);
+            return;
+          }
+        }
+        
+        console.log('Direct registration succeeded:', directResult);
+        setDebugInfo({
+          type: 'Success via Direct API',
+          data: directResult
+        });
+        
+        // Manual login since we bypassed the context
+        localStorage.setItem('token', directResult.token);
+        navigate('/dashboard');
+      }
+    } catch (err) {
+      console.error('All registration attempts failed:', err);
+      
+      // Display the server error message
+      if (err.response && err.response.data) {
+        setError(err.response.data.message || 'Registration failed. Please try again.');
+      } else {
+        setError('Registration failed. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  const handleNext = () => {
+    setActiveStep((prevStep) => prevStep + 1);
+  };
+  
+  const handleBack = () => {
+    setActiveStep((prevStep) => prevStep - 1);
+  };
+  
+  // Determine if we should show doctor fields
+  const isDoctor = formData.userType === 'doctor';
+  
+  return (
+    <Container maxWidth="md" sx={{ py: 8 }}>
+      <Paper elevation={3} sx={{ p: 4, borderRadius: 2 }}>
+        <Box textAlign="center" mb={4}>
+          <Typography variant="h4" fontWeight="bold" color="primary">
+            {t('auth.registerTitle')}
+          </Typography>
+          <Typography variant="subtitle1" color="text.secondary">
+            Create your account to access healthcare services
+          </Typography>
+        </Box>
+        
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+        
+        {authError && !error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {authError}
+          </Alert>
+        )}
+        
+        {debugInfo && (
+          <Alert severity="warning" sx={{ mb: 3 }}>
+            <Typography variant="subtitle2">Debug Info:</Typography>
+            <pre style={{ whiteSpace: 'pre-wrap', fontSize: '0.8rem' }}>
+              {JSON.stringify(debugInfo, null, 2)}
+            </pre>
+          </Alert>
+        )}
+        
+        {isDoctor && (
+          <Box mb={4}>
+            <Stepper activeStep={activeStep} alternativeLabel>
+              <Step>
+                <StepLabel>User Information</StepLabel>
+              </Step>
+              <Step>
+                <StepLabel>Professional Details</StepLabel>
+              </Step>
+              <Step>
+                <StepLabel>Education & Experience</StepLabel>
+              </Step>
+              <Step>
+                <StepLabel>Availability</StepLabel>
+              </Step>
+            </Stepper>
+          </Box>
+        )}
+        
+        <form onSubmit={handleSubmit}>
+          {/* Step 1: Basic Information (shown for all users) */}
+          <Box sx={{ display: isDoctor ? (activeStep === 0 ? 'block' : 'none') : 'block' }}>
+            <Grid container spacing={2}>
+              <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label={t('auth.name')}
+            name="name"
+            value={formData.name}
+            onChange={handleChange}
+            required
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        <PersonIcon color="primary" />
+                      </InputAdornment>
+                    ),
+                  }}
+                />
+              </Grid>
+              
+              <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label={t('auth.email')}
+            name="email"
+            type="email"
+            value={formData.email}
+            onChange={handleChange}
+            required
+          />
+              </Grid>
+          
+              <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label={t('auth.phoneNumber')}
+            name="phoneNumber"
+            value={formData.phoneNumber}
+            onChange={handleChange}
+            required
+          />
+              </Grid>
+          
+              <Grid item xs={12} md={6}>
+                <FormControl fullWidth>
+            <InputLabel id="user-type-label">{t('auth.userType')}</InputLabel>
+            <Select
+              labelId="user-type-label"
+              name="userType"
+              value={formData.userType}
+              label={t('auth.userType')}
+              onChange={handleChange}
+            >
+              <MenuItem value="patient">{t('auth.patient')}</MenuItem>
+              <MenuItem value="doctor">{t('auth.doctor')}</MenuItem>
+              <MenuItem value="pharmacy">{t('auth.pharmacy')}</MenuItem>
+              <MenuItem value="lab">{t('auth.lab')}</MenuItem>
+            </Select>
+          </FormControl>
+              </Grid>
+          
+              <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label={t('auth.password')}
+            name="password"
+            type="password"
+            value={formData.password}
+            onChange={handleChange}
+            required
+          />
+              </Grid>
+          
+              <Grid item xs={12} md={6}>
+          <TextField
+            fullWidth
+            label={t('auth.confirmPassword')}
+            name="confirmPassword"
+            type="password"
+            value={formData.confirmPassword}
+            onChange={handleChange}
+            required
+                />
+              </Grid>
+            </Grid>
+            
+            {isDoctor && (
+              <Box mt={3} display="flex" justifyContent="flex-end">
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleNext}
+                >
+                  Next
+                </Button>
+              </Box>
+            )}
+          </Box>
+          
+          {/* Step 2: Professional Details (doctor only) */}
+          {isDoctor && (
+            <Box sx={{ display: activeStep === 1 ? 'block' : 'none' }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                Professional Details
+              </Typography>
+              
+              <Grid container spacing={2}>
+                <Grid item xs={12} md={6}>
+                  <FormControl fullWidth>
+                    <Autocomplete
+                      value={formData.speciality}
+                      onChange={(event, newValue) => {
+                        setFormData({ ...formData, speciality: newValue });
+                      }}
+                      options={SPECIALTIES}
+                      freeSolo
+                      renderInput={(params) => (
+                        <TextField 
+                          {...params} 
+                          label="Speciality" 
+                          required
+                          InputProps={{
+                            ...params.InputProps,
+                            startAdornment: (
+                              <>
+                                <InputAdornment position="start">
+                                  <MedicalServicesIcon color="primary" />
+                                </InputAdornment>
+                                {params.InputProps.startAdornment}
+                              </>
+                            ),
+                          }}
+                        />
+                      )}
+                    />
+                  </FormControl>
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="License Number"
+                    name="licenseNumber"
+                    value={formData.licenseNumber}
+                    onChange={handleChange}
+                    required
+                    helperText="Enter your medical license number"
+                  />
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <TextField
+                    fullWidth
+                    label="Consultation Fee (₹)"
+                    name="fees"
+                    type="number"
+                    value={formData.fees}
+                    onChange={handleChange}
+                    required
+                    InputProps={{
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <AttachMoneyIcon color="primary" />
+                        </InputAdornment>
+                      ),
+                    }}
+                  />
+                </Grid>
+                
+                <Grid item xs={12} md={6}>
+                  <Autocomplete
+                    multiple
+                    value={formData.languages}
+                    onChange={handleLanguagesChange}
+                    options={LANGUAGES}
+                    freeSolo
+                    renderTags={(value, getTagProps) =>
+                      value.map((option, index) => (
+                        <Chip
+                          variant="outlined"
+                          label={option}
+                          {...getTagProps({ index })}
+                        />
+                      ))
+                    }
+                    renderInput={(params) => (
+                      <TextField
+                        {...params}
+                        label="Languages Spoken"
+                        InputProps={{
+                          ...params.InputProps,
+                          startAdornment: (
+                            <>
+                              <InputAdornment position="start">
+                                <LanguageIcon color="primary" />
+                              </InputAdornment>
+                              {params.InputProps.startAdornment}
+                            </>
+                          ),
+                        }}
+                      />
+                    )}
+                  />
+                </Grid>
+              </Grid>
+              
+              <Box mt={3} display="flex" justifyContent="space-between">
+                <Button onClick={handleBack}>
+                  Back
+                </Button>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleNext}
+                >
+                  Next
+                </Button>
+              </Box>
+            </Box>
+          )}
+          
+          {/* Step 3: Education & Experience (doctor only) */}
+          {isDoctor && (
+            <Box sx={{ display: activeStep === 2 ? 'block' : 'none' }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                Education
+              </Typography>
+              
+              {formData.education.map((edu, index) => (
+                <Card key={`edu-${index}`} variant="outlined" sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={5}>
+                        <TextField
+                          fullWidth
+                          label="Degree"
+                          value={edu.degree}
+                          onChange={(e) => handleEducationChange(index, 'degree', e.target.value)}
+                          required
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <SchoolIcon color="primary" />
+                              </InputAdornment>
+                            ),
+                          }}
+                        />
+                      </Grid>
+                      
+                      <Grid item xs={12} md={5}>
+                        <TextField
+                          fullWidth
+                          label="Institution"
+                          value={edu.institution}
+                          onChange={(e) => handleEducationChange(index, 'institution', e.target.value)}
+                          required
+                        />
+                      </Grid>
+                      
+                      <Grid item xs={10} md={1}>
+                        <TextField
+                          fullWidth
+                          label="Year"
+                          type="number"
+                          value={edu.year}
+                          onChange={(e) => handleEducationChange(index, 'year', e.target.value)}
+                          required
+                        />
+                      </Grid>
+                      
+                      <Grid item xs={2} md={1} display="flex" alignItems="center">
+                        <IconButton 
+                          color="error" 
+                          onClick={() => removeEducation(index)}
+                          disabled={formData.education.length <= 1}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              <Box mb={3}>
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={addEducation}
+                  variant="outlined"
+                >
+                  Add Education
+                </Button>
+              </Box>
+              
+              <Typography variant="h6" color="primary" gutterBottom>
+                Experience
+              </Typography>
+              
+              {formData.experience.map((exp, index) => (
+                <Card key={`exp-${index}`} variant="outlined" sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Grid container spacing={2}>
+                      <Grid item xs={12} md={4}>
+                        <TextField
+                          fullWidth
+                          label="Hospital/Clinic"
+                          value={exp.hospital}
+                          onChange={(e) => handleExperienceChange(index, 'hospital', e.target.value)}
+                          required
+                          InputProps={{
+                            startAdornment: (
+                              <InputAdornment position="start">
+                                <WorkIcon color="primary" />
+                              </InputAdornment>
+                            ),
+                          }}
+                        />
+                      </Grid>
+                      
+                      <Grid item xs={12} md={4}>
+                        <TextField
+                          fullWidth
+                          label="Position"
+                          value={exp.position}
+                          onChange={(e) => handleExperienceChange(index, 'position', e.target.value)}
+                          required
+                        />
+                      </Grid>
+                      
+                      <Grid item xs={10} md={3}>
+                        <TextField
+                          fullWidth
+                          label="Duration (e.g., 2018-2022)"
+                          value={exp.duration}
+                          onChange={(e) => handleExperienceChange(index, 'duration', e.target.value)}
+                          required
+                        />
+                      </Grid>
+                      
+                      <Grid item xs={2} md={1} display="flex" alignItems="center">
+                        <IconButton 
+                          color="error" 
+                          onClick={() => removeExperience(index)}
+                          disabled={formData.experience.length <= 1}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              <Box mb={3}>
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={addExperience}
+                  variant="outlined"
+                >
+                  Add Experience
+                </Button>
+              </Box>
+              
+              <Box mt={3} display="flex" justifyContent="space-between">
+                <Button onClick={handleBack}>
+                  Back
+                </Button>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleNext}
+                >
+                  Next
+                </Button>
+              </Box>
+            </Box>
+          )}
+          
+          {/* Step 4: Availability (doctor only) */}
+          {isDoctor && (
+            <Box sx={{ display: activeStep === 3 ? 'block' : 'none' }}>
+              <Typography variant="h6" color="primary" gutterBottom>
+                Availability
+              </Typography>
+              
+              {formData.availability.map((dayAvail, dayIndex) => (
+                <Card key={`day-${dayIndex}`} variant="outlined" sx={{ mb: 2 }}>
+                  <CardContent>
+                    <Grid container spacing={2} alignItems="center">
+                      <Grid item xs={12} md={3}>
+                        <FormControl fullWidth>
+                          <InputLabel>Day</InputLabel>
+                          <Select
+                            value={dayAvail.day}
+                            label="Day"
+                            onChange={(e) => handleAvailabilityChange(dayIndex, 'day', e.target.value)}
+                            InputProps={{
+                              startAdornment: (
+                                <InputAdornment position="start">
+                                  <ScheduleIcon color="primary" />
+                                </InputAdornment>
+                              ),
+                            }}
+                          >
+                            {DAYS_OF_WEEK.map((day) => (
+                              <MenuItem 
+                                key={day} 
+                                value={day}
+                                disabled={formData.availability.some(
+                                  (a, i) => i !== dayIndex && a.day === day
+                                )}
+                              >
+                                {day}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Grid>
+                      
+                      <Grid item xs={10} md={8}>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Time Slots:
+                        </Typography>
+                        
+                        {dayAvail.slots.map((slot, slotIndex) => (
+                          <Box key={`slot-${dayIndex}-${slotIndex}`} sx={{ mb: 2, display: 'flex', gap: 2 }}>
+                            <TextField
+                              label="Start Time"
+                              type="time"
+                              value={slot.startTime}
+                              onChange={(e) => handleSlotChange(dayIndex, slotIndex, 'startTime', e.target.value)}
+                              InputLabelProps={{ shrink: true }}
+                              inputProps={{ step: 300 }}
+                              sx={{ width: '120px' }}
+                            />
+                            
+                            <TextField
+                              label="End Time"
+                              type="time"
+                              value={slot.endTime}
+                              onChange={(e) => handleSlotChange(dayIndex, slotIndex, 'endTime', e.target.value)}
+                              InputLabelProps={{ shrink: true }}
+                              inputProps={{ step: 300 }}
+                              sx={{ width: '120px' }}
+                            />
+                            
+                            <IconButton 
+                              color="error" 
+                              onClick={() => removeSlot(dayIndex, slotIndex)}
+                              disabled={dayAvail.slots.length <= 1}
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </Box>
+                        ))}
+                        
+                        <Button
+                          startIcon={<AddIcon />}
+                          onClick={() => addSlot(dayIndex)}
+                          size="small"
+                        >
+                          Add Slot
+                        </Button>
+                      </Grid>
+                      
+                      <Grid item xs={2} md={1} display="flex" alignItems="flex-start">
+                        <IconButton 
+                          color="error" 
+                          onClick={() => removeDay(dayIndex)}
+                          disabled={formData.availability.length <= 1}
+                          sx={{ mt: 3 }}
+                        >
+                          <DeleteIcon />
+                        </IconButton>
+                      </Grid>
+                    </Grid>
+                  </CardContent>
+                </Card>
+              ))}
+              
+              <Box mb={3}>
+                <Button
+                  startIcon={<AddIcon />}
+                  onClick={addDay}
+                  variant="outlined"
+                  disabled={formData.availability.length >= 7}
+                >
+                  Add Day
+                </Button>
+              </Box>
+              
+              <Box mt={3} display="flex" justifyContent="space-between">
+                <Button onClick={handleBack}>
+                  Back
+                </Button>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  color="primary"
+                  disabled={loading}
+                >
+                  {loading ? t('common.loading') : t('auth.registerButton')}
+                </Button>
+              </Box>
+            </Box>
+          )}
+          
+          {/* Submit button for non-doctor users */}
+          {!isDoctor && (
+          <Button
+            type="submit"
+            fullWidth
+            variant="contained"
+            color="primary"
+            size="large"
+            disabled={loading}
+            sx={{ mt: 3, mb: 2 }}
+          >
+            {loading ? t('common.loading') : t('auth.registerButton')}
+          </Button>
+          )}
+        </form>
+        
+        <Divider sx={{ my: 3 }}>
+          <Typography variant="body2" color="text.secondary">
+            OR
+          </Typography>
+        </Divider>
+        
+        <Grid container justifyContent="center">
+          <Grid item>
+            <Typography variant="body2">
+              {t('auth.haveAccount')}{' '}
+              <Link to="/login" style={{ color: 'primary' }}>
+                {t('auth.loginHere')}
+              </Link>
+            </Typography>
+          </Grid>
+        </Grid>
+      </Paper>
+    </Container>
+  );
+};
+
+export default RegisterPage; 
