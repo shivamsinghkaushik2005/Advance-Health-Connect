@@ -38,8 +38,12 @@ export const AuthProvider = ({ children }) => {
           
           // Get user data
           const response = await axios.get('/api/auth/profile');
-          setUser(response.data);
-          setIsAuthenticated(true);
+          if (response.data && response.data.user) {
+            setUser(response.data.user);
+            setIsAuthenticated(true);
+          } else {
+            throw new Error('Invalid user data received');
+          }
         }
       } catch (error) {
         console.error('Authentication error', error);
@@ -63,6 +67,10 @@ export const AuthProvider = ({ children }) => {
       console.log('Registering user:', userData);
       const response = await axios.post('/api/auth/register', userData);
       
+      if (!response.data || !response.data.token || !response.data.user) {
+        throw new Error('Invalid response data');
+      }
+
       // Save token to localStorage
       localStorage.setItem('token', response.data.token);
       
@@ -71,7 +79,7 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
       
       // Set user
-      setUser(response.data);
+      setUser(response.data.user);
       setLoading(false);
       
       return response.data;
@@ -104,6 +112,10 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/api/auth/login', { email, password });
       
+      if (!response.data || !response.data.token || !response.data.user) {
+        throw new Error('Invalid response data');
+      }
+
       // Save token to localStorage
       localStorage.setItem('token', response.data.token);
       
@@ -112,7 +124,7 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
       
       // Set user
-      setUser(response.data);
+      setUser(response.data.user);
       setLoading(false);
       
       return response.data;

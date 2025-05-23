@@ -63,6 +63,7 @@ import {
   Save as SaveIcon,
   Add as AddIcon,
   Delete as DeleteIcon,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import useAuth from '../hooks/useAuth';
@@ -86,42 +87,50 @@ const TabPanel = (props) => {
 
 // Status Chip Component
 const StatusChip = ({ status }) => {
-  const statusConfig = {
-    scheduled: { color: 'primary', label: 'Scheduled' },
-    completed: { color: 'success', label: 'Completed' },
-    cancelled: { color: 'error', label: 'Cancelled' },
-    'no-show': { color: 'warning', label: 'No Show' },
+  const getStatusColor = () => {
+    switch (status) {
+      case 'scheduled':
+        return 'primary';
+      case 'completed':
+        return 'success';
+      case 'cancelled':
+        return 'error';
+      default:
+        return 'default';
+    }
   };
 
-  const config = statusConfig[status] || { color: 'default', label: status };
-
   return (
-    <Chip 
-      size="small" 
-      color={config.color} 
-      label={config.label} 
-      variant="outlined" 
+    <Chip
+      label={status}
+      color={getStatusColor()}
+      size="small"
+      sx={{ textTransform: 'capitalize' }}
     />
   );
 };
 
 // Payment Status Chip Component
 const PaymentChip = ({ status }) => {
-  const statusConfig = {
-    pending: { color: 'warning', label: 'Payment Pending' },
-    completed: { color: 'success', label: 'Paid' },
-    refunded: { color: 'info', label: 'Refunded' },
+  const getStatusColor = () => {
+    switch (status) {
+      case 'paid':
+        return 'success';
+      case 'pending':
+        return 'warning';
+      case 'failed':
+        return 'error';
+      default:
+        return 'default';
+    }
   };
 
-  const config = statusConfig[status] || { color: 'default', label: status };
-
   return (
-    <Chip 
-      size="small" 
-      color={config.color} 
-      label={config.label}
-      icon={<PaymentIcon />}
-      variant="outlined" 
+    <Chip
+      label={status}
+      color={getStatusColor()}
+      size="small"
+      sx={{ textTransform: 'capitalize' }}
     />
   );
 };
@@ -165,76 +174,80 @@ const DoctorDashboardPage = () => {
       navigate('/login');
       return;
     }
-    
-    if (user && user.userType !== 'doctor') {
-      navigate('/');
+
+    if (user?.userType !== 'doctor') {
+      navigate('/dashboard');
       return;
     }
     
-    // Fetch doctor profile
-    const fetchDoctorProfile = async () => {
-      try {
-        setLoadingProfile(true);
-        const response = await axios.get('/api/doctors', {
-          params: { userId: user._id }
-        });
-        if (response.data && response.data.length > 0) {
-          setDoctorProfile(response.data[0]);
-        }
-        setLoadingProfile(false);
-      } catch (err) {
-        console.error('Error fetching doctor profile:', err);
-        setProfileError('Failed to load doctor profile');
-        setLoadingProfile(false);
-      }
-    };
-    
-    fetchDoctorProfile();
-    
-    // Fetch appointments for the doctor
-    const fetchAppointments = async () => {
+    // Fetch doctor profile and appointments
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const response = await axios.get('/api/appointments/doctor');
-        setAppointments(response.data);
+        setError(null);
+        
+        // Get auth token
+        const token = localStorage.getItem('token');
+        if (!token) {
+          throw new Error('Authentication token not found');
+        }
+
+        const config = {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        };
+        
+        // Fetch doctor profile - Fix the endpoint URL
+        const profileResponse = await axios.get(`/api/doctors/${user._id}`, config);
+        if (profileResponse.data) {
+          setDoctorProfile(profileResponse.data);
+        }
+
+        // Fetch appointments for the doctor - Fix the endpoint URL
+        const appointmentsResponse = await axios.get(`/api/appointments`, config);
+        const allAppointments = appointmentsResponse.data;
         
         // Sort appointments by date
         const today = new Date();
         today.setHours(0, 0, 0, 0);
         
         // Filter today's appointments
-        const todayAppts = response.data.filter(appointment => {
+        const todayAppts = allAppointments.filter(appointment => {
           const apptDate = new Date(appointment.appointmentDate);
           apptDate.setHours(0, 0, 0, 0);
           return apptDate.getTime() === today.getTime() && appointment.status !== 'cancelled';
         });
         
         // Filter upcoming appointments (excluding today)
-        const upcomingAppts = response.data.filter(appointment => {
+        const upcomingAppts = allAppointments.filter(appointment => {
           const apptDate = new Date(appointment.appointmentDate);
           apptDate.setHours(0, 0, 0, 0);
           return apptDate.getTime() > today.getTime() && appointment.status !== 'cancelled';
         });
         
         // Filter past appointments
-        const pastAppts = response.data.filter(appointment => {
+        const pastAppts = allAppointments.filter(appointment => {
           const apptDate = new Date(appointment.appointmentDate);
           apptDate.setHours(0, 0, 0, 0);
           return (apptDate.getTime() < today.getTime() || appointment.status === 'completed');
         });
         
+        setAppointments(allAppointments);
         setTodayAppointments(todayAppts);
         setUpcomingAppointments(upcomingAppts);
         setPastAppointments(pastAppts);
-        
         setLoading(false);
       } catch (err) {
-        setError('Failed to load appointments. Please try again later.');
+        console.error('Error fetching data:', err);
+        const errorMessage = err.response?.data?.message || err.message || 'Failed to load appointments. Please try again later.';
+        setError(errorMessage);
         setLoading(false);
       }
     };
     
-    fetchAppointments();
+    fetchData();
   }, [user, isAuthenticated, navigate]);
 
   // Initialize form data when doctor profile is loaded
@@ -264,6 +277,8 @@ const DoctorDashboardPage = () => {
 
   const handleClosePatientDialog = () => {
     setPatientDialogOpen(false);
+    setSelectedPatient(null);
+    setSelectedAppointment(null);
   };
 
   const handleStartChat = (appointmentId) => {
@@ -272,31 +287,58 @@ const DoctorDashboardPage = () => {
 
   const handleUpdateStatus = async (id, status) => {
     try {
-      await axios.put(`/api/appointments/${id}/status`, { status });
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const config = {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      };
+
+      await axios.put(`/api/appointments/${id}`, { status }, config);
       
       // Update local state
-      setAppointments(appointments.map(appointment => 
+      const updatedAppointments = appointments.map(appointment => 
         appointment._id === id ? { ...appointment, status } : appointment
-      ));
+      );
+      
+      setAppointments(updatedAppointments);
       
       // Update filtered lists
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      if (status === 'completed') {
-        // Move from today/upcoming to past
-        setTodayAppointments(todayAppointments.filter(a => a._id !== id));
-        setUpcomingAppointments(upcomingAppointments.filter(a => a._id !== id));
-        setPastAppointments([...pastAppointments, {...appointments.find(a => a._id === id), status}]);
-      } else if (status === 'cancelled') {
-        // Move to cancelled
-        setTodayAppointments(todayAppointments.filter(a => a._id !== id));
-        setUpcomingAppointments(upcomingAppointments.filter(a => a._id !== id));
-      }
+      // Recalculate filtered lists
+      const todayAppts = updatedAppointments.filter(appointment => {
+        const apptDate = new Date(appointment.appointmentDate);
+        apptDate.setHours(0, 0, 0, 0);
+        return apptDate.getTime() === today.getTime() && appointment.status !== 'cancelled';
+      });
       
-    } catch (error) {
-      console.error('Error updating appointment status:', error);
-      setError('Failed to update appointment status. Please try again.');
+      const upcomingAppts = updatedAppointments.filter(appointment => {
+        const apptDate = new Date(appointment.appointmentDate);
+        apptDate.setHours(0, 0, 0, 0);
+        return apptDate.getTime() > today.getTime() && appointment.status !== 'cancelled';
+      });
+      
+      const pastAppts = updatedAppointments.filter(appointment => {
+        const apptDate = new Date(appointment.appointmentDate);
+        apptDate.setHours(0, 0, 0, 0);
+        return (apptDate.getTime() < today.getTime() || appointment.status === 'completed');
+      });
+      
+      setTodayAppointments(todayAppts);
+      setUpcomingAppointments(upcomingAppts);
+      setPastAppointments(pastAppts);
+      
+    } catch (err) {
+      console.error('Error updating appointment status:', err);
+      const errorMessage = err.response?.data?.message || err.message || 'Failed to update appointment status. Please try again.';
+      setError(errorMessage);
     }
   };
   
@@ -311,6 +353,7 @@ const DoctorDashboardPage = () => {
           <TableHead>
             <TableRow sx={{ backgroundColor: 'primary.main' }}>
               <TableCell sx={{ color: 'white' }}>Patient</TableCell>
+              <TableCell sx={{ color: 'white' }}>Contact</TableCell>
               <TableCell sx={{ color: 'white' }}>Date</TableCell>
               <TableCell sx={{ color: 'white' }}>Time</TableCell>
               <TableCell sx={{ color: 'white' }}>Status</TableCell>
@@ -324,14 +367,26 @@ const DoctorDashboardPage = () => {
                 <TableCell>
                   <Box display="flex" alignItems="center">
                     <Avatar sx={{ mr: 1, bgcolor: 'primary.light' }}>
-                      {appointment.patientId.name ? appointment.patientId.name.charAt(0) : 'P'}
+                      {appointment.patientId?.name ? appointment.patientId.name.charAt(0) : 'P'}
                     </Avatar>
                     <Box>
-                      <Typography variant="subtitle2">{appointment.patientId.name}</Typography>
+                      <Typography variant="subtitle2">{appointment.patientId?.name || 'Unknown Patient'}</Typography>
                       <Typography variant="caption" color="textSecondary">
-                        {appointment.patientId.email}
+                        ID: {appointment.patientId?._id || 'N/A'}
                       </Typography>
                     </Box>
+                  </Box>
+                </TableCell>
+                <TableCell>
+                  <Box>
+                    <Typography variant="body2">
+                      <EmailIcon fontSize="small" sx={{ mr: 0.5, verticalAlign: 'middle' }} />
+                      {appointment.patientId?.email || 'N/A'}
+                    </Typography>
+                    <Typography variant="body2">
+                      <PhoneIcon fontSize="small" sx={{ mr: 0.5, verticalAlign: 'middle' }} />
+                      {appointment.patientId?.phoneNumber || 'N/A'}
+                    </Typography>
                   </Box>
                 </TableCell>
                 <TableCell>
@@ -357,25 +412,25 @@ const DoctorDashboardPage = () => {
                     </Button>
                     
                     {appointment.status === 'scheduled' && (
-                      <Button 
-                        size="small" 
-                        variant="outlined" 
-                        color="success"
-                        onClick={() => handleUpdateStatus(appointment._id, 'completed')}
-                      >
-                        Complete
-                      </Button>
-                    )}
-                    
-                    {appointment.status === 'scheduled' && (
-                      <Button 
-                        size="small" 
-                        variant="outlined" 
-                        color="error"
-                        onClick={() => handleUpdateStatus(appointment._id, 'cancelled')}
-                      >
-                        Cancel
-                      </Button>
+                      <>
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="success"
+                          onClick={() => handleUpdateStatus(appointment._id, 'completed')}
+                        >
+                          Complete
+                        </Button>
+                        
+                        <Button 
+                          size="small" 
+                          variant="outlined" 
+                          color="error"
+                          onClick={() => handleUpdateStatus(appointment._id, 'cancelled')}
+                        >
+                          Cancel
+                        </Button>
+                      </>
                     )}
                     
                     <Button 
@@ -1187,16 +1242,16 @@ const DoctorDashboardPage = () => {
             onClick={handleClosePatientDialog}
             sx={{ position: 'absolute', right: 8, top: 8 }}
           >
-            <CancelIcon />
+            <CloseIcon />
           </IconButton>
         </DialogTitle>
         <DialogContent dividers>
-          {selectedPatient && (
+          {selectedPatient && selectedAppointment && (
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 <Card variant="outlined">
                   <CardContent>
-                    <Typography variant="h6" gutterBottom>Personal Information</Typography>
+                    <Typography variant="h6" gutterBottom>Patient Information</Typography>
                     <List>
                       <ListItem>
                         <ListItemAvatar>
@@ -1209,6 +1264,7 @@ const DoctorDashboardPage = () => {
                           secondary={selectedPatient.name} 
                         />
                       </ListItem>
+                      
                       <ListItem>
                         <ListItemAvatar>
                           <Avatar>
@@ -1220,6 +1276,7 @@ const DoctorDashboardPage = () => {
                           secondary={selectedPatient.email} 
                         />
                       </ListItem>
+                      
                       <ListItem>
                         <ListItemAvatar>
                           <Avatar>
@@ -1249,9 +1306,10 @@ const DoctorDashboardPage = () => {
                         </ListItemAvatar>
                         <ListItemText 
                           primary="Date" 
-                          secondary={selectedAppointment && format(new Date(selectedAppointment.appointmentDate), 'PPP')} 
+                          secondary={format(new Date(selectedAppointment.appointmentDate), 'PPP')} 
                         />
                       </ListItem>
+                      
                       <ListItem>
                         <ListItemAvatar>
                           <Avatar>
@@ -1260,20 +1318,21 @@ const DoctorDashboardPage = () => {
                         </ListItemAvatar>
                         <ListItemText 
                           primary="Time" 
-                          secondary={selectedAppointment && `${selectedAppointment.startTime} - ${selectedAppointment.endTime}`} 
+                          secondary={`${selectedAppointment.startTime} - ${selectedAppointment.endTime}`} 
                         />
                       </ListItem>
+                      
                       <ListItem>
                         <ListItemAvatar>
                           <Avatar>
-                            {selectedAppointment && selectedAppointment.status === 'completed' ? <CheckIcon /> : 
-                              selectedAppointment && selectedAppointment.status === 'cancelled' ? <CancelIcon /> : 
+                            {selectedAppointment.status === 'completed' ? <CheckIcon /> : 
+                              selectedAppointment.status === 'cancelled' ? <CancelIcon /> : 
                               <AccessTime />}
                           </Avatar>
                         </ListItemAvatar>
                         <ListItemText 
                           primary="Status" 
-                          secondary={selectedAppointment && selectedAppointment.status} 
+                          secondary={selectedAppointment.status} 
                         />
                       </ListItem>
                     </List>
@@ -1289,15 +1348,15 @@ const DoctorDashboardPage = () => {
                     
                     <Typography variant="subtitle1" gutterBottom>Symptoms/Reason for Visit:</Typography>
                     <Typography variant="body2" paragraph>
-                      {selectedAppointment && selectedAppointment.symptoms || 'No symptoms recorded'}
+                      {selectedAppointment.symptoms || 'No symptoms recorded'}
                     </Typography>
                     
                     <Typography variant="subtitle1" gutterBottom>Additional Notes:</Typography>
                     <Typography variant="body2" paragraph>
-                      {selectedAppointment && selectedAppointment.notes || 'No additional notes'}
+                      {selectedAppointment.notes || 'No additional notes'}
                     </Typography>
                     
-                    {selectedAppointment && selectedAppointment.prescription && (
+                    {selectedAppointment.prescription && (
                       <>
                         <Typography variant="subtitle1" gutterBottom>Prescription Information:</Typography>
                         <Typography variant="body2" paragraph>

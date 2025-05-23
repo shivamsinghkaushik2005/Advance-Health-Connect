@@ -2,40 +2,80 @@ import express from 'express';
 import Appointment from '../models/Appointment.js';
 import Doctor from '../models/Doctor.js';
 import { sendAppointmentConfirmationEmail } from '../utils/emailService.js';
+import auth from '../middleware/auth.js';
+import User from '../models/User.js';
 
 const router = express.Router();
 
 // @desc    Get all appointments for current user (either patient or doctor)
 // @route   GET /api/appointments
 // @access  Private
-router.get('/', async (req, res) => {
+router.get('/', auth, async (req, res) => {
   try {
     let appointments;
+    const userId = req.user._id;
+
+    // Find the user
+    const user = await User.findById(userId).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
     
-    if (req.user.userType === 'patient') {
+    if (user.userType === 'patient') {
       // If user is a patient, get their appointments
-      appointments = await Appointment.find({ patientId: req.user._id })
+      appointments = await Appointment.find({ patientId: userId })
         .populate({
           path: 'doctorId',
           populate: {
             path: 'userId',
-            select: 'name email phoneNumber gender'
+            select: 'name email phoneNumber'
           }
         })
         .sort({ appointmentDate: -1 });
-    } else if (req.user.userType === 'doctor') {
+    } else if (user.userType === 'doctor') {
+      // First find the doctor profile
+      const doctorProfile = await Doctor.findOne({ userId: userId });
+      if (!doctorProfile) {
+        return res.status(404).json({ message: 'Doctor profile not found' });
+      }
+
       // If user is a doctor, get appointments assigned to them
-      appointments = await Appointment.find({ doctorId: req.user._id })
-        .populate('patientId', 'name email phoneNumber')
+      appointments = await Appointment.find({ doctorId: doctorProfile._id })
+        .populate({
+          path: 'patientId',
+          model: User,
+          select: 'name email phoneNumber'
+        })
         .sort({ appointmentDate: -1 });
+
+      // Add additional patient information if needed
+      appointments = appointments.map(appointment => {
+        const appointmentObj = appointment.toObject();
+        
+        // Add formatted date and time
+        appointmentObj.formattedDate = new Date(appointment.appointmentDate).toLocaleDateString();
+        appointmentObj.formattedTime = `${appointment.startTime} - ${appointment.endTime}`;
+        
+        // Add patient details
+        if (appointmentObj.patientId) {
+          appointmentObj.patientName = appointmentObj.patientId.name;
+          appointmentObj.patientEmail = appointmentObj.patientId.email;
+          appointmentObj.patientPhone = appointmentObj.patientId.phoneNumber;
+        }
+        
+        return appointmentObj;
+      });
     } else {
       return res.status(403).json({ message: 'Unauthorized user type' });
     }
     
     res.json(appointments);
-  } catch (error) {
-    console.error('Error fetching appointments:', error);
-    res.status(500).json({ message: 'Server error' });
+  } catch (err) {
+    console.error('Error fetching appointments:', err);
+    res.status(500).json({ 
+      message: 'Server error while fetching appointments',
+      error: err.message 
+    });
   }
 });
 
@@ -113,30 +153,39 @@ router.get('/patient', async (req, res) => {
   }
 });
 
-// @desc    Get all appointments for a doctor
-// @route   GET /api/appointments/doctor
-// @access  Private (Doctor)
-router.get('/doctor', async (req, res) => {
+// @desc    Get all appointments for a doctor with patient details
+// @route   GET /api/appointments/doctor/:doctorId
+// @access  Private
+router.get('/doctor/:doctorId', auth, async (req, res) => {
   try {
-    const appointments = await Appointment.find({ doctorId: req.user._id })
-      .populate('patientId', 'name email phoneNumber')
+    const appointments = await Appointment.find({ doctorId: req.params.doctorId })
+      .populate({
+        path: 'patientId',
+        select: 'name email phoneNumber',
+        model: User
+      })
+      .populate({
+        path: 'doctorId',
+        select: 'name speciality fees',
+        model: Doctor
+      })
       .sort({ appointmentDate: -1 });
-    
+
     res.json(appointments);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+  } catch (err) {
+    console.error('Error fetching doctor appointments:', err);
+    res.status(500).json({ message: 'Server error while fetching appointments' });
   }
 });
 
-// @desc    Update appointment status
-// @route   PUT /api/appointments/:id/status
-// @access  Private (Doctor & Patient)
-router.put('/:id/status', async (req, res) => {
+// @desc    Update appointment
+// @route   PUT /api/appointments/:id
+// @access  Private
+router.put('/:id', auth, async (req, res) => {
   try {
     const { status } = req.body;
     
-    if (!['scheduled', 'completed', 'cancelled', 'no-show'].includes(status)) {
+    if (status && !['scheduled', 'completed', 'cancelled', 'no-show'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
     
@@ -148,20 +197,38 @@ router.put('/:id/status', async (req, res) => {
     
     // Check authorization
     if (req.user.userType === 'patient' && appointment.patientId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: 'Not authorized to update this appointment' });
     }
     
     if (req.user.userType === 'doctor' && appointment.doctorId.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ message: 'Not authorized' });
+      return res.status(403).json({ message: 'Not authorized to update this appointment' });
     }
     
-    appointment.status = status;
-    await appointment.save();
+    // Update fields
+    if (status) appointment.status = status;
     
-    res.json(appointment);
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    const updatedAppointment = await appointment.save();
+    
+    // Populate patient and doctor details before sending response
+    const populatedAppointment = await Appointment.findById(updatedAppointment._id)
+      .populate({
+        path: 'patientId',
+        model: User,
+        select: 'name email phoneNumber'
+      });
+    
+    // Add formatted date and time
+    const appointmentData = populatedAppointment.toObject();
+    appointmentData.formattedDate = new Date(populatedAppointment.appointmentDate).toLocaleDateString();
+    appointmentData.formattedTime = `${populatedAppointment.startTime} - ${populatedAppointment.endTime}`;
+    
+    res.json(appointmentData);
+  } catch (err) {
+    console.error('Error updating appointment:', err);
+    res.status(500).json({ 
+      message: 'Server error while updating appointment',
+      error: err.message 
+    });
   }
 });
 

@@ -265,48 +265,6 @@ const RegisterPage = () => {
     });
   };
   
-  // Direct API call for debugging
-  const directRegister = async (userData) => {
-    try {
-      console.log('Making direct API call to /api/auth/register with data:', {
-        ...userData,
-        password: '***HIDDEN***'
-      });
-
-      const response = await axios.post('/api/auth/register', userData, {
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        timeout: 30000 // Increase timeout to 30 seconds
-      });
-      
-      console.log('Direct API response:', response.data);
-      return response.data;
-    } catch (error) {
-      console.error('Direct registration error details:', error);
-      
-      if (error.response) {
-        // The request was made and the server responded with a status code
-        console.error('Server responded with error:', error.response.data);
-        console.error('Status code:', error.response.status);
-      } else if (error.request) {
-        // The request was made but no response was received
-        console.error('No response received from server');
-      } else {
-        // Something happened in setting up the request
-        console.error('Error setting up request:', error.message);
-      }
-      
-      setDebugInfo({
-        type: 'Direct API Error',
-        status: error.response?.status,
-        message: error.message,
-        response: error.response?.data
-      });
-      throw error;
-    }
-  };
-  
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -329,52 +287,46 @@ const RegisterPage = () => {
     setDebugInfo(null);
     
     try {
-      console.log('Sending registration data:', {
-        ...formData,
-        password: '***HIDDEN***' // Hide the password in logs
-      });
-      
       // Create the registration data
       const userData = {
-          name: formData.name, 
-          email: formData.email,
-          password: formData.password,
-          phoneNumber: formData.phoneNumber,
-          userType: formData.userType
+        name: formData.name, 
+        email: formData.email,
+        password: formData.password,
+        phoneNumber: formData.phoneNumber,
+        userType: formData.userType
       };
       
       // Add doctor-specific data if registering as a doctor
-      let doctorData = null;
       if (formData.userType === 'doctor') {
-        doctorData = {
+        userData.doctorData = {
           speciality: formData.speciality,
           licenseNumber: formData.licenseNumber,
           fees: parseFloat(formData.fees),
-          education: formData.education,
-          experience: formData.experience,
+          education: formData.education.filter(edu => edu.degree && edu.institution && edu.year),
+          experience: formData.experience.filter(exp => exp.hospital && exp.position && exp.duration),
           languages: formData.languages,
-          availability: formData.availability
+          availability: formData.availability.map(day => ({
+            day: day.day,
+            slots: day.slots.map(slot => ({
+              startTime: slot.startTime,
+              endTime: slot.endTime,
+              isBooked: false
+            }))
+          }))
         };
       }
+      
+      console.log('Sending registration data:', {
+        ...userData,
+        password: '***HIDDEN***'
+      });
       
       // Try the regular registration through context first
       try {
         // Register the user
         const registeredUser = await register(userData);
         
-        // If doctor, create doctor profile
-        if (formData.userType === 'doctor' && doctorData) {
-          try {
-            doctorData.userId = registeredUser._id;
-            await axios.post('/api/doctors', doctorData);
-          } catch (doctorError) {
-            console.error('Error creating doctor profile:', doctorError);
-            setError('User registered but doctor profile creation failed. Please contact support.');
-            setLoading(false);
-            return;
-          }
-        }
-        
+        // If registration is successful, redirect to dashboard
         navigate('/dashboard');
       } catch (contextError) {
         console.error('Context registration error:', contextError);
@@ -388,20 +340,8 @@ const RegisterPage = () => {
         
         // Try direct registration as a fallback
         console.log('Attempting direct registration...');
-        const directResult = await directRegister(userData);
-        
-        // If doctor, create doctor profile
-        if (formData.userType === 'doctor' && doctorData) {
-          try {
-            doctorData.userId = directResult._id;
-            await axios.post('/api/doctors', doctorData);
-          } catch (doctorError) {
-            console.error('Error creating doctor profile:', doctorError);
-            setError('User registered but doctor profile creation failed. Please contact support.');
-            setLoading(false);
-            return;
-          }
-        }
+        const response = await axios.post('/api/auth/register', userData);
+        const directResult = response.data;
         
         console.log('Direct registration succeeded:', directResult);
         setDebugInfo({

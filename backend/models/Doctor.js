@@ -15,46 +15,40 @@ const doctorSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
-  image: {
-    type: String,
-    default: ''
+  fees: {
+    type: Number,
+    required: true,
+    default: 0
   },
-  education: [{
-    degree: String,
-    institution: String,
-    year: Number
-  }],
   experience: [{
     hospital: String,
     position: String,
     duration: String
   }],
-  fees: {
-    type: Number,
-    required: true
-  },
-  availability: [{
-    day: {
-      type: String,
-      enum: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
-    },
-    slots: [{
-      startTime: String,
-      endTime: String,
-      isBooked: {
-        type: Boolean,
-        default: false
-      }
-    }]
+  education: [{
+    degree: String,
+    institution: String,
+    year: String
   }],
   languages: [String],
+  availability: [{
+    day: String,
+    slots: [{
+      startTime: String,
+      endTime: String
+    }]
+  }],
   rating: {
     type: Number,
     default: 0
   },
-  reviewCount: {
+  numberOfReviews: {
     type: Number,
     default: 0
+  },
+  image: {
+    type: String,
+    default: ''
   },
   isVerified: {
     type: Boolean,
@@ -64,14 +58,6 @@ const doctorSchema = new mongoose.Schema({
     type: String,
     enum: ['pending', 'approved', 'rejected'],
     default: 'pending'
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now
-  },
-  updatedAt: {
-    type: Date,
-    default: Date.now
   }
 }, {
   timestamps: true

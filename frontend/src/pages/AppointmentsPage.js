@@ -2,22 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import {
-  Container,
-  Typography,
   Box,
-  Card,
-  CardContent,
-  Grid,
-  Button,
+  Typography,
   Tabs,
   Tab,
   Chip,
-  Divider,
   Avatar,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemAvatar,
   CircularProgress,
   Alert,
   Dialog,
@@ -26,56 +16,32 @@ import {
   DialogActions,
   TextField,
   IconButton,
-  Paper,
+  Button,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemAvatar,
+  ListItemSecondary,
+  Divider,
+  useTheme
 } from '@mui/material';
-import { styled } from '@mui/material/styles';
-import EventIcon from '@mui/icons-material/Event';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
-import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
-import PaymentIcon from '@mui/icons-material/Payment';
-import VideocamIcon from '@mui/icons-material/Videocam';
-import ChatIcon from '@mui/icons-material/Chat';
-import SendIcon from '@mui/icons-material/Send';
-import CancelIcon from '@mui/icons-material/Cancel';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import {
+  Event as EventIcon,
+  AccessTime as TimeIcon,
+  Chat as ChatIcon,
+  Close as CloseIcon,
+  Send as SendIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Schedule as ScheduleIcon
+} from '@mui/icons-material';
+import { format } from 'date-fns';
 import useAuth from '../hooks/useAuth';
-
-// Styled components
-const StyledTab = styled(Tab)(({ theme }) => ({
-  textTransform: 'none',
-  fontWeight: 500,
-  fontSize: '0.875rem',
-}));
-
-const StatusChip = styled(Chip)(({ theme, status }) => ({
-  fontWeight: 500,
-  backgroundColor: 
-    status === 'completed' ? theme.palette.success.light :
-    status === 'scheduled' ? theme.palette.primary.light :
-    status === 'cancelled' ? theme.palette.error.light :
-    theme.palette.warning.light,
-  color: 
-    status === 'completed' ? theme.palette.success.contrastText :
-    status === 'scheduled' ? theme.palette.primary.contrastText :
-    status === 'cancelled' ? theme.palette.error.contrastText :
-    theme.palette.warning.contrastText,
-}));
-
-const TabPanel = ({ children, value, index, ...other }) => (
-  <div
-    role="tabpanel"
-    hidden={value !== index}
-    id={`appointments-tabpanel-${index}`}
-    aria-labelledby={`appointments-tab-${index}`}
-    {...other}
-  >
-    {value === index && <Box sx={{ py: 3 }}>{children}</Box>}
-  </div>
-);
 
 const AppointmentsPage = () => {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const theme = useTheme();
   
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -111,7 +77,6 @@ const AppointmentsPage = () => {
     setSelectedAppointment(appointment);
     setChatOpen(true);
     
-    // Fetch chat history
     try {
       setChatLoading(true);
       const response = await axios.get(`/api/chat/${appointment._id}`);
@@ -132,13 +97,11 @@ const AppointmentsPage = () => {
 
   const sendMessage = async () => {
     if (!message.trim() || !selectedAppointment) return;
-    
+
     try {
-      const response = await axios.post('/api/chat', {
-        appointmentId: selectedAppointment._id,
-        senderId: user._id,
-        receiverId: selectedAppointment.doctorId._id,
+      const response = await axios.post(`/api/chat/${selectedAppointment._id}`, {
         message: message.trim(),
+        sender: user._id
       });
       
       setChatMessages([...chatMessages, response.data]);
@@ -148,359 +111,280 @@ const AppointmentsPage = () => {
     }
   };
 
-  const cancelAppointment = async (appointmentId) => {
-    try {
-      await axios.put(`/api/appointments/${appointmentId}/cancel`);
-      
-      // Update the appointments list
-      setAppointments(appointments.map(app => 
-        app._id === appointmentId ? { ...app, status: 'cancelled' } : app
-      ));
-    } catch (err) {
-      console.error('Failed to cancel appointment', err);
+  const getStatusColor = (status) => {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return theme.palette.info.main;
+      case 'completed':
+        return theme.palette.success.main;
+      case 'cancelled':
+        return theme.palette.error.main;
+      default:
+        return theme.palette.warning.main;
     }
   };
 
-  const completePayment = async (appointmentId) => {
-    try {
-      await axios.put(`/api/appointments/${appointmentId}/payment`, {
-        paymentStatus: 'completed'
-      });
-      
-      // Update the appointments list
-      setAppointments(appointments.map(app => 
-        app._id === appointmentId ? { ...app, paymentStatus: 'completed' } : app
-      ));
-    } catch (err) {
-      console.error('Failed to process payment', err);
+  const getStatusIcon = (status) => {
+    switch (status.toLowerCase()) {
+      case 'scheduled':
+        return <ScheduleIcon />;
+      case 'completed':
+        return <CheckCircleIcon />;
+      case 'cancelled':
+        return <CancelIcon />;
+      default:
+        return <EventIcon />;
     }
-  };
-
-  // Filter appointments based on tab
-  const filteredAppointments = appointments.filter(appointment => {
-    if (tabValue === 0) return true; // All
-    if (tabValue === 1) return appointment.status === 'scheduled'; // Upcoming
-    if (tabValue === 2) return appointment.status === 'completed'; // Past
-    if (tabValue === 3) return appointment.status === 'cancelled'; // Cancelled
-    return true;
-  });
-
-  const getStatusLabel = (status) => {
-    switch(status) {
-      case 'scheduled': return 'Scheduled';
-      case 'completed': return 'Completed';
-      case 'cancelled': return 'Cancelled';
-      case 'no-show': return 'No Show';
-      default: return status;
-    }
-  };
-
-  const formatDate = (dateString) => {
-    const options = { year: 'numeric', month: 'long', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString(undefined, options);
   };
 
   if (loading) {
     return (
-      <Box display="flex" justifyContent="center" my={8}>
+      <Box display="flex" justifyContent="center" p={4}>
         <CircularProgress />
       </Box>
     );
   }
 
+  if (error) {
+    return (
+      <Box p={3}>
+        <Alert severity="error">{error}</Alert>
+      </Box>
+    );
+  }
+
+  const renderAppointmentList = (appointmentList) => {
+    if (appointmentList.length === 0) {
+      return (
+        <Box p={4} textAlign="center">
+          <Typography color="text.secondary">No appointments found</Typography>
+        </Box>
+      );
+    }
+
+    return (
+      <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
+        {appointmentList.map((appointment, index) => (
+          <React.Fragment key={appointment._id}>
+            <ListItem
+              alignItems="flex-start"
+              sx={{
+                py: 2,
+                transition: 'background-color 0.2s',
+                '&:hover': {
+                  bgcolor: 'action.hover'
+                }
+              }}
+            >
+              <ListItemAvatar>
+                <Avatar sx={{ bgcolor: getStatusColor(appointment.status) }}>
+                  {getStatusIcon(appointment.status)}
+                </Avatar>
+              </ListItemAvatar>
+              <ListItemText
+                primary={
+                  <Box display="flex" justifyContent="space-between" alignItems="center">
+                    <Typography variant="subtitle1" fontWeight="medium">
+                      Dr. {appointment.doctorId.name}
+                    </Typography>
+                    <Chip
+                      size="small"
+                      label={appointment.status}
+                      sx={{
+                        bgcolor: `${getStatusColor(appointment.status)}15`,
+                        color: getStatusColor(appointment.status),
+                        fontWeight: 500
+                      }}
+                    />
+                  </Box>
+                }
+                secondary={
+                  <Box>
+                    <Box display="flex" alignItems="center" gap={2} mt={1}>
+                      <Box display="flex" alignItems="center">
+                        <EventIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
+                        <Typography variant="body2" color="text.secondary">
+                          {format(new Date(appointment.appointmentDate), 'MMM dd, yyyy')}
+                        </Typography>
+                      </Box>
+                      <Box display="flex" alignItems="center">
+                        <TimeIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
+                        <Typography variant="body2" color="text.secondary">
+                          {appointment.startTime} - {appointment.endTime}
+                        </Typography>
+                      </Box>
+                    </Box>
+                    <Box display="flex" gap={1} mt={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<ChatIcon />}
+                        onClick={() => openChat(appointment)}
+                        sx={{
+                          borderColor: theme.palette.primary.main,
+                          color: theme.palette.primary.main,
+                          '&:hover': {
+                            borderColor: theme.palette.primary.dark,
+                            bgcolor: `${theme.palette.primary.main}10`
+                          }
+                        }}
+                      >
+                        Chat with Doctor
+                      </Button>
+                    </Box>
+                  </Box>
+                }
+              />
+            </ListItem>
+            {index < appointmentList.length - 1 && <Divider component="li" />}
+          </React.Fragment>
+        ))}
+      </List>
+    );
+  };
+
+  const upcomingAppointments = appointments.filter(
+    app => app.status === 'scheduled'
+  );
+  
+  const pastAppointments = appointments.filter(
+    app => ['completed', 'cancelled'].includes(app.status)
+  );
+
   return (
-    <Container maxWidth="lg" sx={{ py: 6 }}>
-      <Typography variant="h4" fontWeight="bold" color="primary" gutterBottom>
-        {t('appointments.myAppointments')}
-      </Typography>
-      
-      <Paper elevation={3} sx={{ mt: 3 }}>
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
+    <Box>
+      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange} 
           variant="fullWidth"
-          textColor="primary"
-          indicatorColor="primary"
-          sx={{ borderBottom: 1, borderColor: 'divider' }}
+          sx={{
+            '& .MuiTab-root': {
+              textTransform: 'none',
+              fontWeight: 500,
+              fontSize: '0.9rem'
+            }
+          }}
         >
-          <StyledTab label="All" />
-          <StyledTab label="Upcoming" />
-          <StyledTab label="Past" />
-          <StyledTab label="Cancelled" />
+          <Tab label={`Upcoming (${upcomingAppointments.length})`} />
+          <Tab label={`Past (${pastAppointments.length})`} />
         </Tabs>
-        
-        <TabPanel value={tabValue} index={0}>
-          {renderAppointments(filteredAppointments)}
-        </TabPanel>
-        <TabPanel value={tabValue} index={1}>
-          {renderAppointments(filteredAppointments)}
-        </TabPanel>
-        <TabPanel value={tabValue} index={2}>
-          {renderAppointments(filteredAppointments)}
-        </TabPanel>
-        <TabPanel value={tabValue} index={3}>
-          {renderAppointments(filteredAppointments)}
-        </TabPanel>
-      </Paper>
-      
+      </Box>
+
+      <Box role="tabpanel" hidden={tabValue !== 0}>
+        {tabValue === 0 && renderAppointmentList(upcomingAppointments)}
+      </Box>
+      <Box role="tabpanel" hidden={tabValue !== 1}>
+        {tabValue === 1 && renderAppointmentList(pastAppointments)}
+      </Box>
+
       {/* Chat Dialog */}
       <Dialog
         open={chatOpen}
         onClose={closeChat}
         maxWidth="sm"
         fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            overflow: 'hidden'
+          }
+        }}
       >
-        <DialogTitle>
-          Chat with {selectedAppointment?.doctorId?.userId?.name}
+        <DialogTitle sx={{ 
+          bgcolor: theme.palette.primary.main, 
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          Chat with Doctor
+          <IconButton size="small" onClick={closeChat} sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
         </DialogTitle>
-        <DialogContent dividers>
-          {chatLoading ? (
-            <Box display="flex" justifyContent="center" my={2}>
-              <CircularProgress size={24} />
-            </Box>
-          ) : chatMessages.length === 0 ? (
-            <Box textAlign="center" py={3}>
-              <Typography color="text.secondary">
-                No messages yet. Start the conversation!
-              </Typography>
-            </Box>
-          ) : (
-            <List sx={{ width: '100%', maxHeight: 300, overflow: 'auto' }}>
-              {chatMessages.map((msg, index) => (
-                <ListItem
-                  key={index}
-                  alignItems="flex-start"
-                  sx={{
-                    textAlign: msg.senderId === user._id ? 'right' : 'left',
-                    flexDirection: 'column',
-                    alignItems: msg.senderId === user._id ? 'flex-end' : 'flex-start',
-                  }}
-                >
+        <DialogContent sx={{ p: 0 }}>
+          <Box sx={{ height: 400, display: 'flex', flexDirection: 'column' }}>
+            <Box sx={{ flex: 1, overflowY: 'auto', p: 2 }}>
+              {chatLoading ? (
+                <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                  <CircularProgress />
+                </Box>
+              ) : chatMessages.length === 0 ? (
+                <Box display="flex" justifyContent="center" alignItems="center" height="100%">
+                  <Typography color="text.secondary">No messages yet</Typography>
+                </Box>
+              ) : (
+                chatMessages.map((msg, index) => (
                   <Box
+                    key={index}
                     sx={{
-                      maxWidth: '70%',
-                      backgroundColor: msg.senderId === user._id ? 'primary.light' : 'grey.100',
-                      color: msg.senderId === user._id ? 'primary.contrastText' : 'text.primary',
-                      borderRadius: 2,
-                      padding: 2,
-                      mb: 0.5,
+                      display: 'flex',
+                      justifyContent: msg.sender === user._id ? 'flex-end' : 'flex-start',
+                      mb: 1
                     }}
                   >
-                    <Typography variant="body2">{msg.message}</Typography>
-                  </Box>
-                  <Typography variant="caption" color="text.secondary">
-                    {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </Typography>
-                </ListItem>
-              ))}
-            </List>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ p: 2, display: 'flex' }}>
-          <TextField
-            fullWidth
-            size="small"
-            placeholder="Type your message..."
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-          />
-          <IconButton 
-            color="primary" 
-            onClick={sendMessage}
-            disabled={!message.trim()}
-          >
-            <SendIcon />
-          </IconButton>
-        </DialogActions>
-      </Dialog>
-    </Container>
-  );
-
-  function renderAppointments(appointmentsList) {
-    if (error) {
-      return (
-        <Alert severity="error" sx={{ my: 2 }}>
-          {error}
-        </Alert>
-      );
-    }
-
-    if (appointmentsList.length === 0) {
-      return (
-        <Alert severity="info" sx={{ my: 2 }}>
-          No appointments found.
-        </Alert>
-      );
-    }
-
-    return (
-      <Grid container spacing={3}>
-        {appointmentsList.map((appointment) => (
-          <Grid item xs={12} md={6} key={appointment._id}>
-            <Card elevation={2}>
-              <CardContent>
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Box display="flex" alignItems="center">
-                    <Avatar 
-                      src={`https://randomuser.me/api/portraits/men/${Math.floor(Math.random() * 70)}.jpg`} 
-                      sx={{ width: 50, height: 50, mr: 2 }} 
-                    />
-                    <Box>
-                      <Typography variant="h6">
-                        {appointment.doctorId?.userId?.name || 'Doctor'}
-                      </Typography>
-                      <Typography variant="body2" color="text.secondary">
-                        {appointment.doctorId?.speciality || 'Specialist'}
-                      </Typography>
-                    </Box>
-                  </Box>
-                  
-                  <StatusChip 
-                    label={getStatusLabel(appointment.status)}
-                    status={appointment.status}
-                    size="small"
-                    icon={
-                      appointment.status === 'completed' ? <CheckCircleIcon /> :
-                      appointment.status === 'cancelled' ? <CancelIcon /> :
-                      <EventIcon />
-                    }
-                  />
-                </Box>
-                
-                <Divider sx={{ mb: 2 }} />
-                
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Box display="flex" alignItems="center">
-                      <EventIcon fontSize="small" color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="body2">
-                        {formatDate(appointment.appointmentDate)}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  <Grid item xs={6}>
-                    <Box display="flex" alignItems="center">
-                      <AccessTimeIcon fontSize="small" color="primary" sx={{ mr: 1 }} />
-                      <Typography variant="body2">
-                        {appointment.startTime} - {appointment.endTime}
-                      </Typography>
-                    </Box>
-                  </Grid>
-                  
-                  {appointment.symptoms && (
-                    <Grid item xs={12}>
-                      <Typography variant="body2" color="text.secondary">
-                        <strong>Symptoms:</strong> {appointment.symptoms}
-                      </Typography>
-                    </Grid>
-                  )}
-                </Grid>
-                
-                <Divider sx={{ my: 2 }} />
-                
-                <Box display="flex" justifyContent="space-between" alignItems="center">
-                  <Box>
-                    <Typography variant="body2" color="text.secondary">
-                      Payment Status:
-                    </Typography>
-                    <Chip
-                      size="small"
-                      label={appointment.paymentStatus === 'completed' ? 'Paid' : 'Pending'}
-                      color={appointment.paymentStatus === 'completed' ? 'success' : 'warning'}
-                      variant="outlined"
-                      icon={<PaymentIcon fontSize="small" />}
-                    />
-                  </Box>
-                  
-                  <Typography variant="h6" color="primary" fontWeight="bold">
-                    ₹{appointment.paymentAmount || appointment.doctorId?.fees || 0}
-                  </Typography>
-                </Box>
-                
-                <Box display="flex" justifyContent="space-between" mt={2}>
-                  {appointment.status === 'scheduled' && (
-                    <>
-                      {appointment.paymentStatus !== 'completed' && (
-                        <Button
-                          variant="outlined"
-                          color="primary"
-                          startIcon={<PaymentIcon />}
-                          onClick={() => completePayment(appointment._id)}
-                        >
-                          Pay Now
-                        </Button>
-                      )}
-                      
-                      <Button
-                        variant="outlined"
-                        color="error"
-                        startIcon={<CancelIcon />}
-                        onClick={() => cancelAppointment(appointment._id)}
-                      >
-                        Cancel
-                      </Button>
-                      
-                      {appointment.paymentStatus === 'completed' && (
-                        <Button
-                          variant="contained"
-                          color="primary"
-                          startIcon={<VideocamIcon />}
-                        >
-                          Join Call
-                        </Button>
-                      )}
-                      
-                      <Button
-                        variant="contained"
-                        color="secondary"
-                        startIcon={<ChatIcon />}
-                        onClick={() => openChat(appointment)}
-                      >
-                        Chat
-                      </Button>
-                    </>
-                  )}
-                  
-                  {appointment.status === 'completed' && (
-                    <>
-                      <Button
-                        variant="outlined"
-                        color="primary"
-                        startIcon={<LocalHospitalIcon />}
-                      >
-                        View Prescription
-                      </Button>
-                      
-                      <Button
-                        variant="contained"
-                        color="secondary"
-                        startIcon={<ChatIcon />}
-                        onClick={() => openChat(appointment)}
-                      >
-                        Chat
-                      </Button>
-                    </>
-                  )}
-                  
-                  {appointment.status === 'cancelled' && (
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      fullWidth
+                    <Box
+                      sx={{
+                        maxWidth: '70%',
+                        p: 1.5,
+                        borderRadius: 2,
+                        bgcolor: msg.sender === user._id ? 
+                          `${theme.palette.primary.main}15` : 
+                          theme.palette.grey[100],
+                        color: msg.sender === user._id ?
+                          theme.palette.primary.main :
+                          'text.primary'
+                      }}
                     >
-                      Book Again
-                    </Button>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-          </Grid>
-        ))}
-      </Grid>
-    );
-  }
+                      <Typography variant="body2">{msg.message}</Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                        {format(new Date(msg.timestamp), 'HH:mm')}
+                      </Typography>
+                    </Box>
+                  </Box>
+                ))
+              )}
+            </Box>
+            <Box sx={{ p: 2, borderTop: `1px solid ${theme.palette.divider}` }}>
+              <Box display="flex" gap={1}>
+                <TextField
+                  fullWidth
+                  size="small"
+                  placeholder="Type a message..."
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      borderRadius: 3
+                    }
+                  }}
+                />
+                <IconButton 
+                  color="primary"
+                  onClick={sendMessage}
+                  disabled={!message.trim()}
+                  sx={{
+                    bgcolor: theme.palette.primary.main,
+                    color: 'white',
+                    '&:hover': {
+                      bgcolor: theme.palette.primary.dark
+                    },
+                    '&.Mui-disabled': {
+                      bgcolor: theme.palette.action.disabledBackground
+                    }
+                  }}
+                >
+                  <SendIcon />
+                </IconButton>
+              </Box>
+            </Box>
+          </Box>
+        </DialogContent>
+      </Dialog>
+    </Box>
+  );
 };
 
 export default AppointmentsPage; 

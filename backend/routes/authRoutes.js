@@ -1,8 +1,10 @@
 import express from 'express';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import Doctor from '../models/Doctor.js';
 import config from '../config/env.js';
+import auth from '../middleware/auth.js';
 
 const router = express.Router();
 
@@ -11,62 +13,53 @@ const router = express.Router();
 // @access  Public
 router.post('/register', async (req, res) => {
   try {
-    // Log the request body for debugging
-    console.log('Register request body:', req.body);
-    
-    const { name, email, password, phoneNumber, userType } = req.body;
+    const { name, email, password, phoneNumber, userType, doctorData } = req.body;
 
-    // Log the extracted fields
-    console.log('Extracted fields:', { name, email, phoneNumber, userType });
-
-    // Validate required fields
-    if (!name || !email || !password || !phoneNumber) {
-      console.log('Missing required fields');
-      return res.status(400).json({ message: 'All fields are required' });
+    // Validate input
+    if (!name || !email || !password || !phoneNumber || !userType) {
+      return res.status(400).json({ message: 'Please enter all fields' });
     }
 
-    // Check if user already exists by email
-    const userExistsByEmail = await User.findOne({ email });
-    if (userExistsByEmail) {
-      console.log('User already exists with email:', email);
-      return res.status(400).json({ message: 'User with this email already exists' });
-    }
-    
-    // Check if user exists by phone number
-    const userExistsByPhone = await User.findOne({ phoneNumber });
-    if (userExistsByPhone) {
-      console.log('User already exists with phone number:', phoneNumber);
-      return res.status(400).json({ message: 'User with this phone number already exists' });
+    // Additional validation for doctor registration
+    if (userType === 'doctor') {
+      if (!doctorData || !doctorData.speciality || !doctorData.licenseNumber || !doctorData.fees) {
+        return res.status(400).json({ message: 'All doctor information is required' });
+      }
     }
 
-    // Create new user
-    console.log('Creating new user...');
-    const user = await User.create({
+    // Check for existing user
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create salt & hash
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user
+    const user = new User({
       name,
       email,
-      password,
+      password: hashedPassword,
       phoneNumber,
-      userType: userType || 'patient'
+      userType
     });
 
-    console.log('User created successfully:', user._id);
+    const savedUser = await user.save();
 
     // Create doctor profile if user type is doctor
-    if (user && user.userType === 'doctor') {
+    if (savedUser && savedUser.userType === 'doctor' && doctorData) {
       try {
-        // Check if we have doctor data in the request
-        const doctorData = req.body.doctorData;
-        
-        // If there's no doctor data, we'll just create a placeholder doctor profile
-        // This will be updated later when the doctor completes their profile
         await Doctor.create({
-          userId: user._id,
-          speciality: doctorData?.speciality || 'General Physician',
-          licenseNumber: doctorData?.licenseNumber || `temp-${Date.now()}`,
-          education: doctorData?.education || [],
-          experience: doctorData?.experience || [],
-          fees: doctorData?.fees || 500,
-          availability: doctorData?.availability || [
+          userId: savedUser._id,
+          speciality: doctorData.speciality,
+          licenseNumber: doctorData.licenseNumber,
+          fees: doctorData.fees,
+          education: doctorData.education || [],
+          experience: doctorData.experience || [],
+          languages: doctorData.languages || ['English'],
+          availability: doctorData.availability || [
             {
               day: 'Monday',
               slots: [
@@ -78,52 +71,37 @@ router.post('/register', async (req, res) => {
               ]
             }
           ],
-          languages: doctorData?.languages || ['English'],
           isVerified: false,
           status: 'pending'
         });
-        
-        console.log('Doctor profile created for user:', user._id);
       } catch (doctorError) {
-        console.error('Error creating doctor profile:', doctorError);
-        // We won't fail the registration if doctor profile creation fails
-        // The doctor can create/update their profile later
+        // If doctor profile creation fails, delete the user and throw error
+        await User.findByIdAndDelete(savedUser._id);
+        throw new Error('Failed to create doctor profile: ' + doctorError.message);
       }
     }
 
-    if (user) {
-      // Generate JWT token
-      const token = jwt.sign(
-        { id: user._id, userType: user.userType }, 
-        config.JWT_SECRET, 
-        { expiresIn: '30d' }
-      );
+    // Create token
+    const token = jwt.sign(
+      { id: savedUser._id },
+      config.jwtSecret,
+      { expiresIn: '24h' }
+    );
 
-      res.status(201).json({
-        _id: user._id,
-        name: user.name,
-        email: user.email,
-        phoneNumber: user.phoneNumber,
-        userType: user.userType,
-        token: token
-      });
-    } else {
-      console.log('Failed to create user');
-      res.status(400).json({ message: 'Invalid user data' });
-    }
-  } catch (error) {
-    console.error('Registration error:', error);
-    
-    // Check for duplicate key errors
-    if (error.code === 11000) {
-      const field = Object.keys(error.keyPattern)[0];
-      return res.status(400).json({ 
-        message: `A user with this ${field} already exists`,
-        field: field
-      });
-    }
-    
-    res.status(500).json({ message: 'Server error', error: error.message });
+    // Send response
+    res.status(201).json({
+      token,
+      user: {
+        _id: savedUser._id,
+        name: savedUser.name,
+        email: savedUser.email,
+        phoneNumber: savedUser.phoneNumber,
+        userType: savedUser.userType
+      }
+    });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ message: 'Server error during registration' });
   }
 });
 
@@ -134,32 +112,60 @@ router.post('/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Find user by email
+    // Validate input
+    if (!email || !password) {
+      return res.status(400).json({ message: 'Please enter all fields' });
+    }
+
+    // Check for existing user
     const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(400).json({ message: 'User does not exist' });
+    }
 
-    // Check if user exists and password matches
-    if (user && (await user.matchPassword(password))) {
-      // Generate JWT token
-      const token = jwt.sign(
-        { id: user._id, userType: user.userType }, 
-        config.JWT_SECRET, 
-        { expiresIn: '30d' }
-      );
+    // Validate password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
 
-      res.json({
+    // Create token
+    const token = jwt.sign(
+      { id: user._id },
+      config.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // Send response
+    res.json({
+      token,
+      user: {
         _id: user._id,
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
-        userType: user.userType,
-        token: token
-      });
-    } else {
-      res.status(401).json({ message: 'Invalid email or password' });
+        userType: user.userType
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'Server error during login' });
+  }
+});
+
+// @desc    Get user data
+// @route   GET /api/auth/user
+// @access  Private
+router.get('/user', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.json(user);
+  } catch (err) {
+    console.error('Error fetching user:', err);
+    res.status(500).json({ message: 'Server error while fetching user data' });
   }
 });
 
@@ -168,10 +174,6 @@ router.post('/login', async (req, res) => {
 // @access  Private
 router.get('/profile', async (req, res) => {
   try {
-    // Here you would typically use a middleware to verify the token
-    // and attach the user to the request object
-    // For simplicity, we'll extract the token manually
-
     const token = req.headers.authorization?.split(' ')[1];
     
     if (!token) {
@@ -192,7 +194,8 @@ router.get('/profile', async (req, res) => {
         return res.status(404).json({ message: 'User not found' });
       }
       
-      res.json(user);
+      // Return user data wrapped in a user object
+      res.json({ user });
     } catch (error) {
       res.status(401).json({ message: 'Not authorized, token failed' });
     }
@@ -217,7 +220,7 @@ router.put('/profile', async (req, res) => {
       // Verify token
       const decoded = jwt.verify(
         token, 
-        config.JWT_SECRET
+        config.jwtSecret
       );
       
       // Get user from the token

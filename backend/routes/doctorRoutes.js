@@ -1,7 +1,8 @@
 import express from 'express';
 import Doctor from '../models/Doctor.js';
+import User from '../models/User.js';
+import auth from '../middleware/auth.js';
 import { doctorImageUpload } from '../utils/uploadConfig.js';
-import { protect } from '../middlewares/authMiddleware.js';
 
 const router = express.Router();
 
@@ -10,46 +11,70 @@ const router = express.Router();
 // @access  Public
 router.get('/', async (req, res) => {
   try {
-    // Allow filtering by speciality, language, availability, userId
-    const filters = {};
-    
-    if (req.query.speciality) {
-      filters.speciality = req.query.speciality;
-    }
-    
-    if (req.query.isVerified) {
-      filters.isVerified = req.query.isVerified === 'true';
-    }
-    
-    if (req.query.userId) {
-      filters.userId = req.query.userId;
-    }
-    
-    const doctors = await Doctor.find(filters)
-      .populate('userId', 'name phoneNumber email profileImage')
-      .sort({ rating: -1 });
-      
+    const doctors = await Doctor.find().populate('userId', 'name email phoneNumber');
     res.json(doctors);
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+  } catch (err) {
+    console.error('Error fetching doctors:', err);
+    res.status(500).json({ message: 'Server error while fetching doctors' });
   }
 });
 
 // @desc    Get doctor by ID
 // @route   GET /api/doctors/:id
-// @access  Public
-router.get('/:id', async (req, res) => {
+// @access  Private
+router.get('/:id', auth, async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id)
-      .populate('userId', 'name phoneNumber email profileImage');
-    
-    if (doctor) {
-      res.json(doctor);
-    } else {
-      res.status(404).json({ message: 'Doctor not found' });
+    // First find the user to ensure it's a doctor
+    const user = await User.findById(req.params.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+
+    // Find doctor profile or create one if it doesn't exist
+    let doctor = await Doctor.findOne({ userId: req.params.id });
+    if (!doctor && user.userType === 'doctor') {
+      // Create a new doctor profile
+      doctor = new Doctor({
+        userId: req.params.id,
+        speciality: '',
+        licenseNumber: '',
+        fees: 0,
+        languages: [],
+        education: [],
+        experience: [],
+        availability: []
+      });
+      await doctor.save();
+    }
+
+    if (!doctor) {
+      return res.status(404).json({ message: 'Doctor profile not found' });
+    }
+
+    // Combine user and doctor data
+    const doctorData = {
+      _id: doctor._id,
+      userId: user._id,
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      userType: user.userType,
+      speciality: doctor.speciality,
+      licenseNumber: doctor.licenseNumber,
+      fees: doctor.fees,
+      languages: doctor.languages,
+      education: doctor.education,
+      experience: doctor.experience,
+      availability: doctor.availability,
+      image: doctor.image,
+      isVerified: doctor.isVerified,
+      status: doctor.status
+    };
+
+    res.json(doctorData);
+  } catch (err) {
+    console.error('Error fetching doctor:', err);
+    res.status(500).json({ message: 'Server error while fetching doctor details' });
   }
 });
 
@@ -99,35 +124,59 @@ router.post('/', async (req, res) => {
 // @desc    Update doctor profile
 // @route   PUT /api/doctors/:id
 // @access  Private
-router.put('/:id', protect, async (req, res) => {
+router.put('/:id', auth, async (req, res) => {
   try {
-    const doctor = await Doctor.findById(req.params.id);
-    
-    if (doctor) {
-      // Verify user is authorized to update this doctor profile
-      if (doctor.userId.toString() !== req.user._id.toString()) {
-        return res.status(403).json({ message: 'Not authorized to update this doctor profile' });
-      }
-      
-      doctor.speciality = req.body.speciality || doctor.speciality;
-      doctor.licenseNumber = req.body.licenseNumber || doctor.licenseNumber;
-      doctor.education = req.body.education || doctor.education;
-      doctor.experience = req.body.experience || doctor.experience;
-      doctor.fees = req.body.fees || doctor.fees;
-      doctor.availability = req.body.availability || doctor.availability;
-      doctor.languages = req.body.languages || doctor.languages;
-      // Only update image if provided in the request
-      if (req.body.image) {
-        doctor.image = req.body.image;
-      }
-      
-      const updatedDoctor = await doctor.save();
-      res.json(updatedDoctor);
-    } else {
-      res.status(404).json({ message: 'Doctor not found' });
+    // Check if user exists and is a doctor
+    const user = await User.findById(req.params.id);
+    if (!user || user.userType !== 'doctor') {
+      return res.status(404).json({ message: 'Doctor not found' });
     }
-  } catch (error) {
-    res.status(500).json({ message: error.message });
+
+    // Find or create doctor profile
+    let doctor = await Doctor.findOne({ userId: req.params.id });
+    if (!doctor) {
+      doctor = new Doctor({ userId: req.params.id });
+    }
+
+    // Check authorization
+    if (req.user._id.toString() !== req.params.id) {
+      return res.status(403).json({ message: 'Not authorized to update this profile' });
+    }
+
+    const {
+      speciality,
+      licenseNumber,
+      fees,
+      languages,
+      education,
+      experience,
+      availability
+    } = req.body;
+
+    // Update fields
+    if (speciality) doctor.speciality = speciality;
+    if (licenseNumber) doctor.licenseNumber = licenseNumber;
+    if (fees) doctor.fees = fees;
+    if (languages) doctor.languages = languages;
+    if (education) doctor.education = education;
+    if (experience) doctor.experience = experience;
+    if (availability) doctor.availability = availability;
+
+    await doctor.save();
+
+    // Return combined user and doctor data
+    const doctorData = {
+      ...doctor.toObject(),
+      name: user.name,
+      email: user.email,
+      phoneNumber: user.phoneNumber,
+      userType: user.userType
+    };
+
+    res.json(doctorData);
+  } catch (err) {
+    console.error('Error updating doctor profile:', err);
+    res.status(500).json({ message: 'Server error while updating doctor profile' });
   }
 });
 
@@ -155,7 +204,7 @@ router.put('/:id/verify', async (req, res) => {
 // @desc    Upload doctor profile image
 // @route   POST /api/doctors/:id/upload-image
 // @access  Private
-router.post('/:id/upload-image', protect, doctorImageUpload.single('image'), async (req, res) => {
+router.post('/:id/upload-image', auth, doctorImageUpload.single('image'), async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
     
