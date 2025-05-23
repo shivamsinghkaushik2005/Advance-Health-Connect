@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 const connectDB = async () => {
   try {
     // MongoDB Connection using either .env variable or hardcoded string (not recommended for production)
+    //added
     const MONGO_URI = process.env.MONGO_URI || 'mongodb+srv://singhkaushikshivam:a6dlZhaF76Y5Zvj6@cluster0.4wgy71g.mongodb.net/health-connect';
     
     console.log('Connecting to MongoDB...');
