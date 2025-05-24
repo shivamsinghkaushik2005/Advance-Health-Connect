@@ -136,8 +136,12 @@ const PaymentChip = ({ status }) => {
 };
 
 const DoctorDashboardPage = () => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, logout, setUser, setIsAuthenticated } = useAuth();
   const navigate = useNavigate();
+  
+  // Add debug logging
+  console.log('DoctorDashboardPage - User:', user);
+  console.log('DoctorDashboardPage - isAuthenticated:', isAuthenticated);
   
   const [appointments, setAppointments] = useState([]);
   const [selectedPatient, setSelectedPatient] = useState(null);
@@ -168,87 +172,189 @@ const DoctorDashboardPage = () => {
   const [newEducation, setNewEducation] = useState({ degree: '', institution: '', year: '' });
   const [newExperience, setNewExperience] = useState({ hospital: '', position: '', duration: '' });
 
+  // Add axios interceptor to handle token
+  useEffect(() => {
+    // Add request interceptor
+    const interceptor = axios.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
+        return Promise.reject(error);
+      }
+    );
+
+    // Add response interceptor to handle 401 errors
+    const responseInterceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          // Clear auth state on 401 errors
+          localStorage.removeItem('token');
+          setUser(null);
+          setIsAuthenticated(false);
+          navigate('/login');
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptors on component unmount
+    return () => {
+      axios.interceptors.request.eject(interceptor);
+      axios.interceptors.response.eject(responseInterceptor);
+    };
+  }, [navigate, setUser, setIsAuthenticated]);
+
   useEffect(() => {
     // Redirect if not logged in or not a doctor
-    if (!isAuthenticated) {
+    if (!isAuthenticated || !user || user.userType !== 'doctor') {
+      console.log('Debug - Auth check failed:', { isAuthenticated, user });
       navigate('/login');
       return;
     }
 
-    if (user?.userType !== 'doctor') {
-      navigate('/dashboard');
-      return;
-    }
-    
-    // Fetch doctor profile and appointments
     const fetchData = async () => {
       try {
         setLoading(true);
         setError(null);
+
+        console.log('Debug - Starting data fetch for user:', user);
         
-        // Get auth token
-        const token = localStorage.getItem('token');
-        if (!token) {
-          throw new Error('Authentication token not found');
+        // First find the doctor profile using userId
+        console.log('Debug - Fetching doctor profile for userId:', user._id);
+        const profileResponse = await axios.get(`/api/doctors/profile/${user._id}`);
+        console.log('Debug - Doctor profile response:', profileResponse.data);
+        
+        const doctorProfileData = profileResponse.data;
+        setDoctorProfile(doctorProfileData);
+
+        // If profile is empty (newly created), show edit mode and profile tab
+        if (!doctorProfileData.speciality || !doctorProfileData.licenseNumber || doctorProfileData.fees === 0) {
+          console.log('Debug - Empty doctor profile, showing edit mode');
+          setEditing(true);
+          setTabValue(3); // Switch to profile tab
+          setError('Please complete your profile setup to start accepting appointments.');
+          setLoading(false);
+          return;
         }
 
-        const config = {
+        // Now fetch appointments
+        console.log('Debug - Fetching appointments');
+        const appointmentsResponse = await axios.get('/api/appointments', {
           headers: {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
+            'Authorization': `Bearer ${localStorage.getItem('token')}`
           }
-        };
-        
-        // Fetch doctor profile - Fix the endpoint URL
-        const profileResponse = await axios.get(`/api/doctors/${user._id}`, config);
-        if (profileResponse.data) {
-          setDoctorProfile(profileResponse.data);
-        }
+        });
+        console.log('Debug - Raw appointments response:', appointmentsResponse.data);
 
-        // Fetch appointments for the doctor - Fix the endpoint URL
-        const appointmentsResponse = await axios.get(`/api/appointments`, config);
-        const allAppointments = appointmentsResponse.data;
-        
-        // Sort appointments by date
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        
-        // Filter today's appointments
-        const todayAppts = allAppointments.filter(appointment => {
-          const apptDate = new Date(appointment.appointmentDate);
-          apptDate.setHours(0, 0, 0, 0);
-          return apptDate.getTime() === today.getTime() && appointment.status !== 'cancelled';
-        });
-        
-        // Filter upcoming appointments (excluding today)
-        const upcomingAppts = allAppointments.filter(appointment => {
-          const apptDate = new Date(appointment.appointmentDate);
-          apptDate.setHours(0, 0, 0, 0);
-          return apptDate.getTime() > today.getTime() && appointment.status !== 'cancelled';
-        });
-        
-        // Filter past appointments
-        const pastAppts = allAppointments.filter(appointment => {
-          const apptDate = new Date(appointment.appointmentDate);
-          apptDate.setHours(0, 0, 0, 0);
-          return (apptDate.getTime() < today.getTime() || appointment.status === 'completed');
-        });
-        
-        setAppointments(allAppointments);
-        setTodayAppointments(todayAppts);
-        setUpcomingAppointments(upcomingAppts);
-        setPastAppointments(pastAppts);
-        setLoading(false);
+        if (appointmentsResponse.data && Array.isArray(appointmentsResponse.data)) {
+          const appointments = appointmentsResponse.data;
+          console.log('Debug - Processing appointments:', appointments);
+          setAppointments(appointments);
+          
+          // Filter appointments for different views
+          const today = new Date();
+          today.setHours(0, 0, 0, 0);
+          
+          const todayAppts = appointments.filter(appointment => {
+            const apptDate = new Date(appointment.appointmentDate);
+            apptDate.setHours(0, 0, 0, 0);
+            const isToday = apptDate.getTime() === today.getTime();
+            const notCancelled = appointment.status !== 'cancelled';
+            console.log('Debug - Today appointment check:', {
+              appointmentId: appointment._id,
+              date: apptDate,
+              isToday,
+              notCancelled,
+              status: appointment.status
+            });
+            return isToday && notCancelled;
+          });
+          
+          const upcomingAppts = appointments.filter(appointment => {
+            const apptDate = new Date(appointment.appointmentDate);
+            apptDate.setHours(0, 0, 0, 0);
+            const isFuture = apptDate.getTime() > today.getTime();
+            const notCancelled = appointment.status !== 'cancelled';
+            console.log('Debug - Upcoming appointment check:', {
+              appointmentId: appointment._id,
+              date: apptDate,
+              isFuture,
+              notCancelled,
+              status: appointment.status
+            });
+            return isFuture && notCancelled;
+          });
+          
+          const pastAppts = appointments.filter(appointment => {
+            const apptDate = new Date(appointment.appointmentDate);
+            apptDate.setHours(0, 0, 0, 0);
+            const isPast = apptDate.getTime() < today.getTime();
+            const isCompleted = appointment.status === 'completed';
+            console.log('Debug - Past appointment check:', {
+              appointmentId: appointment._id,
+              date: apptDate,
+              isPast,
+              isCompleted,
+              status: appointment.status
+            });
+            return isPast || isCompleted;
+          });
+
+          console.log('Debug - Filtered appointments:', {
+            total: appointments.length,
+            today: todayAppts.length,
+            upcoming: upcomingAppts.length,
+            past: pastAppts.length
+          });
+
+          setTodayAppointments(todayAppts);
+          setUpcomingAppointments(upcomingAppts);
+          setPastAppointments(pastAppts);
+        } else {
+          console.log('Debug - No appointments found or invalid response:', appointmentsResponse.data);
+          setTodayAppointments([]);
+          setUpcomingAppointments([]);
+          setPastAppointments([]);
+        }
       } catch (err) {
-        console.error('Error fetching data:', err);
-        const errorMessage = err.response?.data?.message || err.message || 'Failed to load appointments. Please try again later.';
-        setError(errorMessage);
+        console.error('Debug - Error details:', {
+          message: err.message,
+          response: err.response?.data,
+          status: err.response?.status,
+          stack: err.stack
+        });
+        
+        if (err.response?.status === 401) {
+          setError('Your session has expired. Please login again.');
+          logout();
+          navigate('/login');
+          return;
+        }
+        
+        if (err.response?.status === 404) {
+          if (err.response?.data?.message === 'Doctor profile not found') {
+            setEditing(true);
+            setTabValue(3); // Switch to profile tab
+            setError('Please complete your profile setup to start accepting appointments.');
+          } else {
+            setError('Could not find your doctor profile. Please contact support.');
+          }
+        } else {
+          setError(err.response?.data?.message || err.message || 'Failed to load data');
+        }
+      } finally {
         setLoading(false);
       }
     };
-    
+
     fetchData();
-  }, [user, isAuthenticated, navigate]);
+  }, [user, isAuthenticated, navigate, logout]);
 
   // Initialize form data when doctor profile is loaded
   useEffect(() => {
@@ -287,19 +393,7 @@ const DoctorDashboardPage = () => {
 
   const handleUpdateStatus = async (id, status) => {
     try {
-      const token = localStorage.getItem('token');
-      if (!token) {
-        throw new Error('Authentication token not found');
-      }
-
-      const config = {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      };
-
-      await axios.put(`/api/appointments/${id}`, { status }, config);
+      await axios.put(`/api/appointments/${id}`, { status });
       
       // Update local state
       const updatedAppointments = appointments.map(appointment => 
@@ -562,17 +656,9 @@ const DoctorDashboardPage = () => {
       setUpdateError('');
       setSuccess('');
       
-      const token = localStorage.getItem('token');
-      
       const response = await axios.put(
         `/api/doctors/${doctorProfile._id}`, 
-        formData,
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          }
-        }
+        formData
       );
       
       if (response.data) {

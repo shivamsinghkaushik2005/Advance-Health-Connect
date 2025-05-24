@@ -11,43 +11,87 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // Setup axios defaults
+  // Setup axios defaults and interceptors
   useEffect(() => {
-    // axios.defaults.baseURL line removed - using proxy from package.json instead
-    
-    // Log axios errors for debugging
-    axios.interceptors.response.use(
-      response => response,
-      error => {
-        console.log('Axios error:', error.response?.data || error.message);
+    // Add request interceptor for all requests
+    const requestInterceptor = axios.interceptors.request.use(
+      (config) => {
+        const token = localStorage.getItem('token');
+        if (token) {
+          config.headers['Authorization'] = `Bearer ${token}`;
+        }
+        return config;
+      },
+      (error) => {
         return Promise.reject(error);
       }
     );
+
+    // Add response interceptor to handle 401 errors
+    const responseInterceptor = axios.interceptors.response.use(
+      (response) => response,
+      (error) => {
+        if (error.response?.status === 401) {
+          // Clear auth state on 401 errors
+          localStorage.removeItem('token');
+          setUser(null);
+          setIsAuthenticated(false);
+        }
+        return Promise.reject(error);
+      }
+    );
+
+    // Cleanup interceptors
+    return () => {
+      axios.interceptors.request.eject(requestInterceptor);
+      axios.interceptors.response.eject(responseInterceptor);
+    };
   }, []);
 
   // Check if user is logged in on initial load
   useEffect(() => {
     const checkLoggedIn = async () => {
       try {
-        // Check for token in localStorage
         const token = localStorage.getItem('token');
-        
-        if (token) {
-          // Set axios auth header
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        if (!token) {
+          setLoading(false);
+          return;
+        }
+
+        // Set default axios auth header
+        axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+
+        // Verify token and get user data
+        const response = await axios.get('/api/auth/profile');
+        if (response.data && response.data.user) {
+          const userData = response.data.user;
           
-          // Get user data
-          const response = await axios.get('/api/auth/profile');
-          if (response.data && response.data.user) {
-            setUser(response.data.user);
-            setIsAuthenticated(true);
-          } else {
-            throw new Error('Invalid user data received');
+          // If user is a doctor, get doctor profile
+          if (userData.userType === 'doctor') {
+            try {
+              const doctorResponse = await axios.get(`/api/doctors/${userData._id}`);
+              if (doctorResponse.data) {
+                userData.doctorProfile = doctorResponse.data;
+                localStorage.setItem('doctorProfile', JSON.stringify(doctorResponse.data));
+              }
+            } catch (doctorError) {
+              console.error('Error fetching doctor profile:', doctorError);
+            }
           }
+          
+          setUser(userData);
+          setIsAuthenticated(true);
+        } else {
+          // Clear invalid token
+          localStorage.removeItem('token');
+          localStorage.removeItem('doctorProfile');
+          delete axios.defaults.headers.common['Authorization'];
         }
       } catch (error) {
-        console.error('Authentication error', error);
+        console.error('Authentication error:', error);
         localStorage.removeItem('token');
+        localStorage.removeItem('doctorProfile');
+        delete axios.defaults.headers.common['Authorization'];
         setUser(null);
         setIsAuthenticated(false);
       } finally {
@@ -58,117 +102,132 @@ export const AuthProvider = ({ children }) => {
     checkLoggedIn();
   }, []);
 
-  // Register user
-  const register = async (userData) => {
-    setLoading(true);
-    setError(null);
-    
-    try {
-      console.log('Registering user:', userData);
-      const response = await axios.post('/api/auth/register', userData);
-      
-      if (!response.data || !response.data.token || !response.data.user) {
-        throw new Error('Invalid response data');
-      }
-
-      // Save token to localStorage
-      localStorage.setItem('token', response.data.token);
-      
-      // Set token in state and axios headers
-      setIsAuthenticated(true);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
-      
-      // Set user
-      setUser(response.data.user);
-      setLoading(false);
-      
-      return response.data;
-    } catch (error) {
-      console.error('Registration error details:', error.response?.data);
-      
-      // Detailed error handling
-      if (error.response) {
-        // Server responded with an error
-        const errorMessage = error.response.data.message || 'Registration failed';
-        setError(errorMessage);
-      } else if (error.request) {
-        // Request was made but no response
-        setError('No response from server. Please check your connection.');
-      } else {
-        // Something else happened
-        setError('Error during registration. Please try again.');
-      }
-      
-      setLoading(false);
-      throw error;
-    }
-  };
-
   // Login user
   const login = async (email, password) => {
-    setLoading(true);
-    setError(null);
-    
     try {
+      setLoading(true);
+      setError(null);
+
       const response = await axios.post('/api/auth/login', { email, password });
       
-      if (!response.data || !response.data.token || !response.data.user) {
+      if (!response.data?.token || !response.data?.user) {
         throw new Error('Invalid response data');
       }
 
-      // Save token to localStorage
+      const userData = response.data.user;
+
+      // If user is a doctor, get doctor profile
+      if (userData.userType === 'doctor') {
+        try {
+          const doctorResponse = await axios.get(`/api/doctors/${userData._id}`);
+          if (doctorResponse.data) {
+            userData.doctorProfile = doctorResponse.data;
+            localStorage.setItem('doctorProfile', JSON.stringify(doctorResponse.data));
+          }
+        } catch (doctorError) {
+          console.error('Error fetching doctor profile:', doctorError);
+        }
+      }
+
+      // Save token to localStorage and set default axios auth header
       localStorage.setItem('token', response.data.token);
-      
-      // Set token in state and axios headers
-      setIsAuthenticated(true);
       axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
       
-      // Set user
-      setUser(response.data.user);
-      setLoading(false);
+      // Set user data and auth state
+      setUser(userData);
+      setIsAuthenticated(true);
       
-      return response.data;
+      // Return the response data for the login page to use
+      return {
+        token: response.data.token,
+        user: userData
+      };
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Invalid credentials';
       setError(errorMessage);
-      setLoading(false);
       throw error;
+    } finally {
+      setLoading(false);
     }
   };
 
   // Logout user
   const logout = () => {
-    // Remove token from localStorage
     localStorage.removeItem('token');
-    
-    // Remove axios auth header
+    localStorage.removeItem('doctorProfile');
     delete axios.defaults.headers.common['Authorization'];
-    
-    // Reset states
     setUser(null);
     setIsAuthenticated(false);
     setError(null);
   };
 
-  // Clear error
-  const clearError = () => {
-    setError(null);
+  // Register user
+  const register = async (userData) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Ensure we're sending the complete data for doctor registration
+      const requestData = {
+        name: userData.name,
+        email: userData.email,
+        password: userData.password,
+        phoneNumber: userData.phoneNumber,
+        userType: userData.userType
+      };
+
+      // Add doctor-specific data if registering as a doctor
+      if (userData.userType === 'doctor' && userData.doctorData) {
+        requestData.doctorData = {
+          speciality: userData.doctorData.speciality,
+          licenseNumber: userData.doctorData.licenseNumber,
+          fees: parseFloat(userData.doctorData.fees),
+          education: userData.doctorData.education || [],
+          experience: userData.doctorData.experience || [],
+          languages: userData.doctorData.languages || ['English'],
+          availability: userData.doctorData.availability || []
+        };
+      }
+
+      const response = await axios.post('/api/auth/register', requestData);
+      
+      if (!response.data?.token || !response.data?.user) {
+        throw new Error('Invalid response data');
+      }
+
+      // Save token and set default axios auth header
+      localStorage.setItem('token', response.data.token);
+      axios.defaults.headers.common['Authorization'] = `Bearer ${response.data.token}`;
+      
+      // Set user data and auth state
+      setUser(response.data.user);
+      setIsAuthenticated(true);
+      
+      return response.data;
+    } catch (error) {
+      console.error('Registration error:', error);
+      const errorMessage = error.response?.data?.message || 'Registration failed';
+      setError(errorMessage);
+      throw error;
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Context value
-  const value = {
-    user,
-    isAuthenticated,
-    loading,
-    error,
-    register,
-    login,
-    logout,
-    clearError
-  };
-  
+  // Clear error
+  const clearError = () => setError(null);
+
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider value={{
+      user,
+      isAuthenticated,
+      loading,
+      error,
+      login,
+      logout,
+      register,
+      clearError
+    }}>
       {children}
     </AuthContext.Provider>
   );

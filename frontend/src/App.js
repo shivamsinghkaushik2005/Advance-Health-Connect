@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import useAuth from './hooks/useAuth';
+import { Box, CircularProgress } from '@mui/material';
 
 // Layout Components
 import Header from './components/layout/Header';
@@ -25,10 +26,18 @@ import DoctorDashboardPage from './pages/DoctorDashboardPage';
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated, loading } = useAuth();
   
-  if (loading) return <div>Loading...</div>;
+  console.log('ProtectedRoute Check:', { isAuthenticated, loading });
+  
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
+      </Box>
+    );
+  }
   
   if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+    return <Navigate to="/login" replace />;
   }
   
   return children;
@@ -38,14 +47,22 @@ const ProtectedRoute = ({ children }) => {
 const DoctorRoute = ({ children }) => {
   const { isAuthenticated, loading, user } = useAuth();
   
-  if (loading) return <div>Loading...</div>;
+  console.log('DoctorRoute Check:', { isAuthenticated, loading, userType: user?.userType });
   
-  if (!isAuthenticated) {
-    return <Navigate to="/login" />;
+  if (loading) {
+    return (
+      <Box display="flex" justifyContent="center" alignItems="center" minHeight="80vh">
+        <CircularProgress />
+      </Box>
+    );
   }
   
-  if (user?.userType !== 'doctor') {
-    return <Navigate to="/dashboard" />;
+  if (!isAuthenticated || !user) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  if (user.userType !== 'doctor') {
+    return <Navigate to="/dashboard" replace />;
   }
   
   return children;
@@ -127,6 +144,8 @@ const theme = createTheme({
 
 function App() {
   const { isAuthenticated, user } = useAuth();
+  
+  console.log('App Render:', { isAuthenticated, userType: user?.userType });
 
   return (
     <ThemeProvider theme={theme}>
@@ -135,8 +154,34 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<HomePage />} />
-          <Route path="/login" element={!isAuthenticated ? <LoginPage /> : <Navigate to="/dashboard" />} />
-          <Route path="/register" element={!isAuthenticated ? <RegisterPage /> : <Navigate to="/dashboard" />} />
+          <Route 
+            path="/login" 
+            element={
+              isAuthenticated ? (
+                user?.userType === 'doctor' ? (
+                  <Navigate to="/doctor-dashboard" replace />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <LoginPage />
+              )
+            } 
+          />
+          <Route 
+            path="/register" 
+            element={
+              isAuthenticated ? (
+                user?.userType === 'doctor' ? (
+                  <Navigate to="/doctor-dashboard" replace />
+                ) : (
+                  <Navigate to="/dashboard" replace />
+                )
+              ) : (
+                <RegisterPage />
+              )
+            } 
+          />
           <Route path="/doctors" element={<DoctorsPage />} />
           <Route path="/doctors/:id" element={<DoctorDetailPage />} />
           <Route path="/health-camps" element={<HealthCampsPage />} />
@@ -146,7 +191,11 @@ function App() {
             path="/dashboard" 
             element={
               <ProtectedRoute>
-                {user?.userType === 'doctor' ? <Navigate to="/doctor-dashboard" /> : <Dashboard />}
+                {user?.userType === 'doctor' ? (
+                  <Navigate to="/doctor-dashboard" replace />
+                ) : (
+                  <Dashboard />
+                )}
               </ProtectedRoute>
             } 
           />

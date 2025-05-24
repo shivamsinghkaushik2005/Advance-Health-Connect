@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import {
@@ -73,6 +73,7 @@ const DoctorDetailPage = () => {
   const { id } = useParams();
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const { user, isAuthenticated } = useAuth();
   
   const [doctor, setDoctor] = useState(null);
@@ -92,7 +93,13 @@ const DoctorDetailPage = () => {
     const fetchDoctor = async () => {
       try {
         setLoading(true);
+        setError(null); // Reset error state
+        
         const response = await axios.get(`/api/doctors/${id}`);
+        if (!response.data) {
+          throw new Error('No data received from server');
+        }
+        
         setDoctor(response.data);
         
         // Set default day selection if doctor has availability
@@ -102,12 +109,15 @@ const DoctorDetailPage = () => {
         
         setLoading(false);
       } catch (err) {
-        setError('Failed to load doctor details. Please try again later.');
+        console.error('Error fetching doctor details:', err);
+        setError(err.response?.data?.message || 'Failed to load doctor details. Please try again later.');
         setLoading(false);
       }
     };
 
-    fetchDoctor();
+    if (id) {
+      fetchDoctor();
+    }
   }, [id]);
 
   const handleTabChange = (event, newValue) => {
@@ -129,21 +139,32 @@ const DoctorDetailPage = () => {
   };
 
   const handleBookAppointment = async () => {
-    if (!isAuthenticated) {
-      // Redirect to login if not authenticated
+    if (!isAuthenticated || !user) {
       setBookingStatus({ 
         success: false, 
         error: 'Please login to book an appointment' 
       });
-      // Navigate to login page after a brief delay
       setTimeout(() => {
-        navigate('/login');
+        navigate('/login', { state: { from: location.pathname } });
       }, 1500);
+      return;
+    }
+
+    if (user.userType !== 'patient') {
+      setBookingStatus({ 
+        success: false, 
+        error: 'Only patients can book appointments' 
+      });
       return;
     }
 
     if (!selectedDay || !selectedSlot) {
       setBookingStatus({ success: false, error: 'Please select a day and time slot for your appointment.' });
+      return;
+    }
+
+    if (!appointmentData.symptoms.trim()) {
+      setBookingStatus({ success: false, error: 'Please describe your symptoms.' });
       return;
     }
 
@@ -158,23 +179,46 @@ const DoctorDetailPage = () => {
     appointmentDate.setDate(today.getDate() + (daysDiff === 0 ? 7 : daysDiff)); // Next occurrence of the day
     
     try {
-      const response = await axios.post('/api/appointments', {
-        doctorId: doctor._id,
-        appointmentDate: appointmentDate.toISOString(),
-        startTime: selectedSlot.startTime,
-        endTime: selectedSlot.endTime,
-        symptoms: appointmentData.symptoms,
-        notes: appointmentData.notes,
-        paymentAmount: doctor.fees,
-        paymentStatus: 'pending'
-      });
+      setBookingStatus({ success: false, error: null }); // Reset status
       
+      // Get the token from localStorage
+      const token = localStorage.getItem('token');
+      if (!token) {
+        throw new Error('Authentication token not found');
+      }
+
+      const response = await axios.post('/api/appointments', 
+        {
+          doctorId: doctor._id,
+          appointmentDate: appointmentDate.toISOString(),
+          startTime: selectedSlot.startTime,
+          endTime: selectedSlot.endTime,
+          symptoms: appointmentData.symptoms,
+          notes: appointmentData.notes
+        },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+      
+      console.log('Appointment booked successfully:', response.data);
       setBookingStatus({ success: true, error: null });
       setPaymentModalOpen(true);
     } catch (err) {
+      console.error('Error booking appointment:', err);
+      const errorMessage = err.response?.data?.message || 'Failed to book appointment. Please try again.';
+      if (err.response?.status === 401 || err.response?.status === 403) {
+        // If unauthorized or forbidden, redirect to login
+        setTimeout(() => {
+          navigate('/login', { state: { from: location.pathname } });
+        }, 1500);
+      }
       setBookingStatus({ 
         success: false, 
-        error: err.response?.data?.message || 'Failed to book appointment. Please try again.' 
+        error: errorMessage
       });
     }
   };
@@ -238,9 +282,9 @@ const DoctorDetailPage = () => {
               </Typography>
               
               <Box display="flex" justifyContent="center" alignItems="center" mb={1}>
-                <Rating value={doctor.rating} precision={0.1} readOnly size="small" />
+                <Rating value={doctor.rating || 0} precision={0.1} readOnly size="small" />
                 <Typography variant="body2" sx={{ ml: 1 }}>
-                  ({doctor.reviewCount} {t('common.reviews')})
+                  ({doctor.reviewCount || 0} {t('common.reviews')})
                 </Typography>
               </Box>
               
@@ -512,15 +556,15 @@ const DoctorDetailPage = () => {
             <TabPanel value={tabValue} index={2}>
               <Box p={2}>
                 <Box display="flex" alignItems="center" mb={3}>
-                  <Rating value={doctor.rating} precision={0.1} readOnly />
+                  <Rating value={doctor.rating || 0} precision={0.1} readOnly />
                   <Typography variant="h6" sx={{ ml: 1 }}>
-                    {doctor.rating.toFixed(1)}
-        </Typography>
+                    {(doctor.rating || 0).toFixed(1)}
+                  </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                    ({doctor.reviewCount} reviews)
-        </Typography>
-      </Box>
-      
+                    ({doctor.reviewCount || 0} reviews)
+                  </Typography>
+                </Box>
+                
                 <Alert severity="info">
                   Patient reviews will be displayed here.
                 </Alert>
@@ -582,8 +626,8 @@ const DoctorDetailPage = () => {
             </Typography>
             <Typography variant="h5" color="primary" fontWeight="bold">
               ₹{doctor.fees}
-        </Typography>
-      </Box>
+            </Typography>
+          </Box>
           
           <Alert severity="info" sx={{ mb: 3 }}>
             This is a demo payment page. In a real application, payment gateway would be integrated here.

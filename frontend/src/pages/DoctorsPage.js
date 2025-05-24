@@ -162,11 +162,9 @@ const DoctorsPage = () => {
                     height="180"
                     image={doctor.image 
                       ? doctor.image 
-                      : doctor.userId 
-                        ? `https://randomuser.me/api/portraits/${doctor.userId.gender === 'female' ? 'women' : 'men'}/${Math.floor(Math.random() * 70)}.jpg` 
-                        : 'https://randomuser.me/api/portraits/men/0.jpg'
+                      : `https://randomuser.me/api/portraits/${doctor.gender === 'female' ? 'women' : 'men'}/${Math.floor(Math.random() * 70)}.jpg`
                     }
-                    alt={doctor.userId?.name || 'Doctor'}
+                    alt={doctor.name || 'Doctor'}
                   />
                   <Box
                     sx={{
@@ -179,7 +177,7 @@ const DoctorsPage = () => {
                       padding: '10px',
                     }}
                   >
-                    <Typography variant="h6">{doctor.userId?.name || 'Doctor'}</Typography>
+                    <Typography variant="h6">{doctor.name || 'Doctor'}</Typography>
                     <Box display="flex" alignItems="center">
                       <LocalHospitalIcon sx={{ fontSize: 16, mr: 0.5 }} />
                       <Typography variant="body2">
@@ -190,140 +188,86 @@ const DoctorsPage = () => {
                 </Box>
                 
                 <CardContent sx={{ flexGrow: 1 }}>
-                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
-                    <Box display="flex" alignItems="center">
-                      <Rating value={doctor.rating || 0} precision={0.1} readOnly size="small" />
-                      <Typography variant="body2" sx={{ ml: 1 }}>
-                        ({doctor.reviewCount || 0} {t('common.reviews')})
+                  <Box display="flex" flexDirection="column" gap={1}>
+                    {/* Verification Status */}
+                    <Box display="flex" alignItems="center" gap={1}>
+                      {doctor.isVerified ? (
+                        <Chip
+                          icon={<VerifiedIcon />}
+                          label="Verified"
+                          color="success"
+                          size="small"
+                        />
+                      ) : (
+                        <Chip
+                          label="Verification Pending"
+                          color="warning"
+                          size="small"
+                        />
+                      )}
+                    </Box>
+
+                    {/* Experience */}
+                    {doctor.experience && doctor.experience.length > 0 && (
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Experience
+                        </Typography>
+                        <Box display="flex" gap={1} flexWrap="wrap">
+                          {doctor.experience.map((exp, index) => (
+                            <Chip
+                              key={index}
+                              icon={<WorkIcon />}
+                              label={`${exp.position} at ${exp.hospital}`}
+                              size="small"
+                              variant="outlined"
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {/* Languages */}
+                    {doctor.languages && doctor.languages.length > 0 && (
+                      <Box>
+                        <Typography variant="subtitle2" color="text.secondary">
+                          Languages
+                        </Typography>
+                        <Box display="flex" gap={1} flexWrap="wrap">
+                          {doctor.languages.map((lang, index) => (
+                            <Chip
+                              key={index}
+                              icon={<LanguageIcon />}
+                              label={lang}
+                              size="small"
+                              variant="outlined"
+                            />
+                          ))}
+                        </Box>
+                      </Box>
+                    )}
+
+                    {/* Consultation Fee */}
+                    <Box display="flex" alignItems="center" gap={1}>
+                      <Typography variant="subtitle2" color="text.secondary">
+                        Consultation Fee:
+                      </Typography>
+                      <Typography variant="body1" color="primary" fontWeight="bold">
+                        ₹{doctor.fees || 0}
                       </Typography>
                     </Box>
-                    
-                    {doctor.isVerified && (
-                      <Chip 
-                        icon={<VerifiedIcon />} 
-                        label="Verified" 
-                        size="small" 
-                        color="success" 
-                        variant="outlined"
-                      />
-                    )}
                   </Box>
-                  
-                  <Box display="flex" alignItems="center" mb={2}>
-                    <LocationOnIcon color="action" sx={{ fontSize: 18, mr: 0.5 }} />
-                    <Typography variant="body2" color="text.secondary">
-                      Muzaffarpur, Bihar
-                    </Typography>
-                  </Box>
-                  
-                  <Divider sx={{ my: 1 }} />
-                  
-                  <Box mt={2} display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="body2">
-                      {t('doctors.consultationFee')}:
-                    </Typography>
-                    <Typography variant="h6" color="primary" fontWeight="bold">
-                      ₹{doctor.fees || 0}
-                    </Typography>
-                  </Box>
-                  
-                  <Box mt={1} mb={2} display="flex" flexWrap="wrap" gap={0.5}>
-                    {(doctor.languages || []).slice(0, 3).map((language) => (
-                      <Chip 
-                        key={language} 
-                        label={language} 
-                        size="small" 
-                        variant="outlined" 
-                        icon={<LanguageIcon sx={{ fontSize: 14 }} />}
-                      />
-                    ))}
-                    {(doctor.languages || []).length > 3 && (
-                      <Chip 
-                        label={`+${doctor.languages.length - 3}`} 
-                        size="small" 
-                        variant="outlined" 
-                      />
-                    )}
-                  </Box>
-                  
-                  <Accordion elevation={0} disableGutters>
-                    <AccordionSummary
-                      expandIcon={<ExpandMoreIcon />}
-                      aria-controls="qualification-content"
-                      id="qualification-header"
-                      sx={{ p: 0, minHeight: 40 }}
-                    >
-                      <Typography variant="body2" color="primary">
-                        Qualifications & Experience
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails sx={{ p: 0, pt: 1 }}>
-                      {/* Education */}
-                      {doctor.education && doctor.education.length > 0 && (
-                        <Box>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <SchoolIcon sx={{ fontSize: 14, mr: 0.5 }} /> Education
-                          </Typography>
-                          <List dense sx={{ py: 0 }}>
-                            {doctor.education.slice(0, 2).map((edu, index) => (
-                              <ListItem key={index} sx={{ px: 1, py: 0 }}>
-                                <ListItemText 
-                                  primary={
-                                    <Typography variant="caption" display="block" sx={{ fontWeight: 'medium' }}>
-                                      {edu.degree}
-                                    </Typography>
-                                  }
-                                  secondary={
-                                    <Typography variant="caption" display="block" color="text.secondary">
-                                      {edu.institution}
-                                    </Typography>
-                                  }
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                        </Box>
-                      )}
-                      
-                      {/* Experience */}
-                      {doctor.experience && doctor.experience.length > 0 && (
-                        <Box mt={1}>
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'flex', alignItems: 'center' }}>
-                            <WorkIcon sx={{ fontSize: 14, mr: 0.5 }} /> Experience
-                          </Typography>
-                          <List dense sx={{ py: 0 }}>
-                            {doctor.experience.slice(0, 2).map((exp, index) => (
-                              <ListItem key={index} sx={{ px: 1, py: 0 }}>
-                                <ListItemText 
-                                  primary={
-                                    <Typography variant="caption" display="block" sx={{ fontWeight: 'medium' }}>
-                                      {exp.position}
-                                    </Typography>
-                                  }
-                                  secondary={
-                                    <Typography variant="caption" display="block" color="text.secondary">
-                                      {exp.hospital} {exp.duration && `(${exp.duration})`}
-                                    </Typography>
-                                  }
-                                />
-                              </ListItem>
-                            ))}
-                          </List>
-                        </Box>
-                      )}
-                    </AccordionDetails>
-                  </Accordion>
                 </CardContent>
-                
+
                 <CardActions sx={{ p: 2, pt: 0 }}>
-                  <Button 
+                  <Button
                     component={Link}
                     to={`/doctors/${doctor._id}`}
-                    variant="contained" 
-                    color="primary" 
+                    variant="contained"
                     fullWidth
+                    color="primary"
                   >
-                    {t('doctors.viewProfile')}
+                    Book Appointment
                   </Button>
                 </CardActions>
               </Card>

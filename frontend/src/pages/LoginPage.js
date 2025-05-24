@@ -41,10 +41,21 @@ const LoginPage = () => {
     setLoading(true);
     
     try {
-      // Login the user (remove the setTimeout)
-      await login(formData.email, formData.password);
-      navigate('/dashboard');
+      console.log('Attempting login...');
+      // Login the user
+      const response = await login(formData.email, formData.password);
+      console.log('Login successful:', response);
+      
+      // Redirect based on user type
+      if (response.user.userType === 'doctor') {
+        console.log('User is a doctor, redirecting to doctor dashboard');
+        navigate('/doctor-dashboard');
+      } else {
+        console.log('User is not a doctor, redirecting to regular dashboard');
+        navigate('/dashboard');
+      }
     } catch (err) {
+      console.error('Login error:', err);
       setError(err.response?.data?.message || 'Invalid email or password');
     } finally {
       setLoading(false);

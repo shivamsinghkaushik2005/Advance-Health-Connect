@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import config from '../config/env.js';
 
 const auth = async (req, res, next) => {
   try {
@@ -18,9 +19,13 @@ const auth = async (req, res, next) => {
     }
 
     try {
-      // Use the correct secret key from environment variables
-      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      // Use the JWT secret from config
+      const decoded = jwt.verify(token, config.JWT_SECRET);
       
+      if (!decoded || !decoded.id) {
+        return res.status(401).json({ message: 'Invalid token structure' });
+      }
+
       // Get user from database
       const user = await User.findById(decoded.id).select('-password');
       
@@ -28,10 +33,12 @@ const auth = async (req, res, next) => {
         return res.status(401).json({ message: 'Token is valid but user not found' });
       }
 
-      // Add user to request
+      // Add user and token to request
       req.user = user;
+      req.token = token;
       next();
     } catch (err) {
+      console.error('Token verification error:', err);
       if (err.name === 'TokenExpiredError') {
         return res.status(401).json({ message: 'Token has expired, please login again' });
       }

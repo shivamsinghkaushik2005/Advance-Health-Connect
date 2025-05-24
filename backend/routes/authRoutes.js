@@ -84,7 +84,7 @@ router.post('/register', async (req, res) => {
     // Create token
     const token = jwt.sign(
       { id: savedUser._id },
-      config.jwtSecret,
+      config.JWT_SECRET,
       { expiresIn: '24h' }
     );
 
@@ -136,6 +136,34 @@ router.post('/login', async (req, res) => {
       { expiresIn: '24h' }
     );
 
+    // If user is a doctor, get doctor profile
+    let doctorData = null;
+    if (user.userType === 'doctor') {
+      doctorData = await Doctor.findOne({ userId: user._id });
+      
+      // If no doctor profile exists, create one
+      if (!doctorData) {
+        doctorData = await Doctor.create({
+          userId: user._id,
+          speciality: '',
+          licenseNumber: '',
+          fees: 0,
+          education: [],
+          experience: [],
+          languages: ['English'],
+          availability: [{
+            day: 'Monday',
+            slots: [{
+              startTime: '09:00',
+              endTime: '17:00'
+            }]
+          }],
+          isVerified: false,
+          status: 'pending'
+        });
+      }
+    }
+
     // Send response
     res.json({
       token,
@@ -144,7 +172,21 @@ router.post('/login', async (req, res) => {
         name: user.name,
         email: user.email,
         phoneNumber: user.phoneNumber,
-        userType: user.userType
+        userType: user.userType,
+        ...(doctorData && {
+          doctorProfile: {
+            _id: doctorData._id,
+            speciality: doctorData.speciality,
+            licenseNumber: doctorData.licenseNumber,
+            fees: doctorData.fees,
+            education: doctorData.education,
+            experience: doctorData.experience,
+            languages: doctorData.languages,
+            availability: doctorData.availability,
+            isVerified: doctorData.isVerified,
+            status: doctorData.status
+          }
+        })
       }
     });
   } catch (err) {
@@ -172,35 +214,19 @@ router.get('/user', auth, async (req, res) => {
 // @desc    Get current user profile
 // @route   GET /api/auth/profile
 // @access  Private
-router.get('/profile', async (req, res) => {
+router.get('/profile', auth, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    // Get user from database (already verified by auth middleware)
+    const user = await User.findById(req.user._id).select('-password');
     
-    if (!token) {
-      return res.status(401).json({ message: 'Not authorized, no token' });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-
-    try {
-      // Verify token
-      const decoded = jwt.verify(
-        token, 
-        config.JWT_SECRET
-      );
-      
-      // Get user from the token
-      const user = await User.findById(decoded.id).select('-password');
-      
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      
-      // Return user data wrapped in a user object
-      res.json({ user });
-    } catch (error) {
-      res.status(401).json({ message: 'Not authorized, token failed' });
-    }
+    
+    // Return user data wrapped in a user object
+    res.json({ user });
   } catch (error) {
-    console.error(error);
+    console.error('Profile fetch error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
@@ -208,51 +234,33 @@ router.get('/profile', async (req, res) => {
 // @desc    Update user profile
 // @route   PUT /api/auth/profile
 // @access  Private
-router.put('/profile', async (req, res) => {
+router.put('/profile', auth, async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(' ')[1];
+    // Get user from database (already verified by auth middleware)
+    const user = await User.findById(req.user._id);
     
-    if (!token) {
-      return res.status(401).json({ message: 'Not authorized, no token' });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
     }
-
-    try {
-      // Verify token
-      const decoded = jwt.verify(
-        token, 
-        config.jwtSecret
-      );
-      
-      // Get user from the token
-      const user = await User.findById(decoded.id);
-      
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
-      }
-      
-      // Update user fields
-      user.name = req.body.name || user.name;
-      // Email cannot be changed for security reasons
-      user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
-      user.gender = req.body.gender || user.gender;
-      
-      // Save updated user
-      const updatedUser = await user.save();
-      
-      // Return user without password
-      res.json({
-        _id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        phoneNumber: updatedUser.phoneNumber,
-        userType: updatedUser.userType,
-        gender: updatedUser.gender
-      });
-      
-    } catch (error) {
-      console.error('Token verification error:', error);
-      res.status(401).json({ message: 'Not authorized, token failed' });
-    }
+    
+    // Update user fields
+    user.name = req.body.name || user.name;
+    // Email cannot be changed for security reasons
+    user.phoneNumber = req.body.phoneNumber || user.phoneNumber;
+    user.gender = req.body.gender || user.gender;
+    
+    // Save updated user
+    const updatedUser = await user.save();
+    
+    // Return user without password
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      phoneNumber: updatedUser.phoneNumber,
+      userType: updatedUser.userType,
+      gender: updatedUser.gender
+    });
   } catch (error) {
     console.error('Profile update error:', error);
     res.status(500).json({ message: 'Server error' });

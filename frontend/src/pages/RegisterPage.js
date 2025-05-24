@@ -269,6 +269,11 @@ const RegisterPage = () => {
     e.preventDefault();
     
     // Basic validation
+    if (!formData.name || !formData.email || !formData.password || !formData.phoneNumber) {
+      setError("Please fill in all required fields");
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setError("Passwords don't match");
       return;
@@ -276,8 +281,40 @@ const RegisterPage = () => {
     
     // Validate doctor-specific fields if user type is doctor
     if (formData.userType === 'doctor') {
-      if (!formData.speciality || !formData.licenseNumber || !formData.fees) {
-        setError("Please fill in all required doctor information");
+      if (!formData.speciality) {
+        setError("Please select your speciality");
+        return;
+      }
+      if (!formData.licenseNumber) {
+        setError("Please enter your license number");
+        return;
+      }
+      if (!formData.fees || formData.fees <= 0) {
+        setError("Please enter valid consultation fees");
+        return;
+      }
+      
+      // Validate education
+      if (!formData.education.some(edu => edu.degree && edu.institution && edu.year)) {
+        setError("Please add at least one education record with complete details");
+        return;
+      }
+      
+      // Validate experience
+      if (!formData.experience.some(exp => exp.hospital && exp.position && exp.duration)) {
+        setError("Please add at least one experience record with complete details");
+        return;
+      }
+      
+      // Validate languages
+      if (!formData.languages || formData.languages.length === 0) {
+        setError("Please select at least one language");
+        return;
+      }
+      
+      // Validate availability
+      if (!formData.availability || formData.availability.length === 0) {
+        setError("Please add at least one day of availability");
         return;
       }
     }
@@ -289,10 +326,10 @@ const RegisterPage = () => {
     try {
       // Create the registration data
       const userData = {
-        name: formData.name, 
-        email: formData.email,
+        name: formData.name.trim(), 
+        email: formData.email.trim(),
         password: formData.password,
-        phoneNumber: formData.phoneNumber,
+        phoneNumber: formData.phoneNumber.trim(),
         userType: formData.userType
       };
       
@@ -300,7 +337,7 @@ const RegisterPage = () => {
       if (formData.userType === 'doctor') {
         userData.doctorData = {
           speciality: formData.speciality,
-          licenseNumber: formData.licenseNumber,
+          licenseNumber: formData.licenseNumber.trim(),
           fees: parseFloat(formData.fees),
           education: formData.education.filter(edu => edu.degree && edu.institution && edu.year),
           experience: formData.experience.filter(exp => exp.hospital && exp.position && exp.duration),
@@ -321,40 +358,14 @@ const RegisterPage = () => {
         password: '***HIDDEN***'
       });
       
-      // Try the regular registration through context first
-      try {
-        // Register the user
-        const registeredUser = await register(userData);
-        
-        // If registration is successful, redirect to dashboard
-        navigate('/dashboard');
-      } catch (contextError) {
-        console.error('Context registration error:', contextError);
-        
-        // If context registration fails, try direct API call
-        setDebugInfo({
-          type: 'Context Error',
-          message: contextError.message,
-          response: contextError.response?.data
-        });
-        
-        // Try direct registration as a fallback
-        console.log('Attempting direct registration...');
-        const response = await axios.post('/api/auth/register', userData);
-        const directResult = response.data;
-        
-        console.log('Direct registration succeeded:', directResult);
-        setDebugInfo({
-          type: 'Success via Direct API',
-          data: directResult
-        });
-        
-        // Manual login since we bypassed the context
-        localStorage.setItem('token', directResult.token);
-        navigate('/dashboard');
-      }
+      // Register the user
+      const registeredUser = await register(userData);
+      
+      // If registration is successful, redirect to dashboard
+      navigate('/dashboard');
+      
     } catch (err) {
-      console.error('All registration attempts failed:', err);
+      console.error('Registration error:', err);
       
       // Display the server error message
       if (err.response && err.response.data) {
