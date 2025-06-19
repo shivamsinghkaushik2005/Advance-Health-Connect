@@ -541,18 +541,28 @@ const Header = () => {
       </List>
       <Divider />
       <Box sx={{ p: 2 }}>
-        <FormControl fullWidth size="small">
-          <Select
-            value={currentLanguage}
-            onChange={handleLanguageChange}
-            displayEmpty
-            startAdornment={<TranslateIcon sx={{ mr: 1 }} />}
+        <Typography variant="subtitle2" sx={{ mb: 1, fontWeight: 'bold', display: 'flex', alignItems: 'center' }}>
+          <TranslateIcon sx={{ mr: 1, fontSize: '1rem' }} />
+          {t('app.selectLanguage') || 'Select Language'}
+        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+          <Button 
+            onClick={() => changeLanguage('en')} 
+            variant={currentLanguage === 'en' ? 'contained' : 'outlined'}
+            color="primary"
+            sx={{ flex: 1, mr: 1 }}
           >
-            {languages.map((lang) => (
-              <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
-            ))}
-          </Select>
-        </FormControl>
+            English
+          </Button>
+          <Button 
+            onClick={() => changeLanguage('hi')} 
+            variant={currentLanguage === 'hi' ? 'contained' : 'outlined'}
+            color="primary"
+            sx={{ flex: 1 }}
+          >
+            हिंदी
+          </Button>
+        </Box>
       </Box>
     </Box>
   );
@@ -618,20 +628,48 @@ const Header = () => {
 
           {/* Language Selector + Auth Buttons */}
           <Box sx={{ mr: 2, display: { xs: 'none', md: 'flex' } }}>
-            <FormControl size="small">
-              <Select
-                value={currentLanguage}
-                onChange={handleLanguageChange}
-                displayEmpty
-                variant="outlined"
-                sx={{ height: 40 }}
-                startAdornment={<TranslateIcon sx={{ mr: 1 }} />}
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                alignItems: 'center', 
+                border: '1px solid rgba(0, 0, 0, 0.12)', 
+                borderRadius: 1, 
+                overflow: 'hidden',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                mr: 2
+              }}
+            >
+              <TranslateIcon sx={{ mx: 1, color: 'primary.main', fontSize: '1.2rem' }} />
+              <Button 
+                onClick={() => changeLanguage('en')} 
+                sx={{ 
+                  py: 0.5, 
+                  px: 1.5, 
+                  minWidth: 'auto',
+                  backgroundColor: currentLanguage === 'en' ? 'primary.main' : 'transparent',
+                  color: currentLanguage === 'en' ? 'white' : 'text.primary',
+                  '&:hover': { backgroundColor: currentLanguage === 'en' ? 'primary.dark' : 'rgba(0,0,0,0.04)' },
+                  borderRadius: 0,
+                  borderRight: '1px solid rgba(0,0,0,0.12)'
+                }}
               >
-                {languages.map((lang) => (
-                  <MenuItem key={lang.code} value={lang.code}>{lang.name}</MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                English
+              </Button>
+              <Button 
+                onClick={() => changeLanguage('hi')} 
+                sx={{ 
+                  py: 0.5, 
+                  px: 1.5, 
+                  minWidth: 'auto',
+                  backgroundColor: currentLanguage === 'hi' ? 'primary.main' : 'transparent',
+                  color: currentLanguage === 'hi' ? 'white' : 'text.primary',
+                  '&:hover': { backgroundColor: currentLanguage === 'hi' ? 'primary.dark' : 'rgba(0,0,0,0.04)' },
+                  borderRadius: 0
+                }}
+              >
+                हिंदी
+              </Button>
+            </Box>
           </Box>
 
           {!isAuthenticated ? (

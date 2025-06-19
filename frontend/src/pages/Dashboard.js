@@ -18,7 +18,11 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Slide
+  Slide,
+  List,
+  ListItem,
+  ListItemText,
+  ListItemIcon
 } from '@mui/material';
 import {
   CalendarMonth as CalendarIcon,
@@ -27,11 +31,15 @@ import {
   Notifications as NotificationIcon,
   AccountCircle as ProfileIcon,
   ArrowForward as ArrowForwardIcon,
-  Close as CloseIcon
+  Close as CloseIcon,
+  MedicalServices as MedicalServicesIcon,
+  Description as DescriptionIcon,
+  Upload as UploadIcon
 } from '@mui/icons-material';
 import useAuth from '../hooks/useAuth';
 import AppointmentsPage from './AppointmentsPage';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 const Transition = React.forwardRef(function Transition(props, ref) {
   return <Slide direction="up" ref={ref} {...props} />;
@@ -45,27 +53,48 @@ const Dashboard = () => {
 
   // State for appointments dialog and counts
   const [appointmentsDialogOpen, setAppointmentsDialogOpen] = useState(false);
+  const [medicalHistoryDialogOpen, setMedicalHistoryDialogOpen] = useState(false);
+  const [reportsDialogOpen, setReportsDialogOpen] = useState(false);
   const [appointmentCounts, setAppointmentCounts] = useState({
     upcoming: 0,
     prescriptions: 0,
     healthCamps: 0
   });
+  const [medicalHistory, setMedicalHistory] = useState([]);
+  const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch appointment counts
+  // Fetch appointment counts and user data
   useEffect(() => {
-    const fetchAppointmentCounts = async () => {
+    const fetchData = async () => {
       try {
-        const response = await axios.get('/api/appointments/patient');
-        const appointments = response.data;
+        // Fetch appointments
+        const appointmentsResponse = await axios.get('/api/appointments/patient');
+        const appointments = appointmentsResponse.data;
         
         // Count upcoming appointments (scheduled ones)
         const upcomingCount = appointments.filter(app => app.status === 'scheduled').length;
         
-        // Count active prescriptions (you might need to adjust this based on your API)
+        // Count active prescriptions
         const prescriptionCount = appointments.filter(app => 
           app.status === 'completed' && app.prescription
         ).length;
+
+        // Fetch user data for medical history
+        const userResponse = await axios.get('/api/auth/profile');
+        const userData = userResponse.data;
+        
+        if (userData.medicalHistory) {
+          setMedicalHistory(userData.medicalHistory);
+        }
+        
+        // For demo purposes - sample reports data
+        // In a real app, you would fetch this from an API
+        setReports([
+          { id: 1, name: 'Blood Test Report', date: '2023-10-15', type: 'Blood Test' },
+          { id: 2, name: 'X-Ray Report', date: '2023-09-22', type: 'Radiology' },
+          { id: 3, name: 'Annual Health Checkup', date: '2023-08-05', type: 'General' }
+        ]);
 
         setAppointmentCounts({
           upcoming: upcomingCount,
@@ -74,12 +103,12 @@ const Dashboard = () => {
         });
         setLoading(false);
       } catch (err) {
-        console.error('Failed to fetch appointment counts:', err);
+        console.error('Failed to fetch data:', err);
         setLoading(false);
       }
     };
 
-    fetchAppointmentCounts();
+    fetchData();
   }, []);
 
   // Dummy data for progress (you can replace with real data)
@@ -91,6 +120,22 @@ const Dashboard = () => {
 
   const handleCloseAppointmentsDialog = () => {
     setAppointmentsDialogOpen(false);
+  };
+  
+  const handleViewMedicalHistory = () => {
+    setMedicalHistoryDialogOpen(true);
+  };
+
+  const handleCloseMedicalHistoryDialog = () => {
+    setMedicalHistoryDialogOpen(false);
+  };
+  
+  const handleViewReports = () => {
+    setReportsDialogOpen(true);
+  };
+
+  const handleCloseReportsDialog = () => {
+    setReportsDialogOpen(false);
   };
 
   const StatCard = ({ icon: Icon, title, value, color, onArrowClick }) => (
@@ -176,7 +221,7 @@ const Dashboard = () => {
 
       <Grid container spacing={3}>
         {/* Stats Cards */}
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <StatCard 
             icon={CalendarIcon}
             title="Upcoming Appointments"
@@ -185,7 +230,7 @@ const Dashboard = () => {
             onArrowClick={handleViewAllAppointments}
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <StatCard 
             icon={PrescriptionIcon}
             title="Active Prescriptions"
@@ -193,12 +238,22 @@ const Dashboard = () => {
             color={theme.palette.success.main}
           />
         </Grid>
-        <Grid item xs={12} md={4}>
+        <Grid item xs={12} md={3}>
           <StatCard 
-            icon={CampaignIcon}
-            title="Health Camps"
-            value={loading ? "..." : appointmentCounts.healthCamps}
+            icon={MedicalServicesIcon}
+            title="Medical History"
+            value={loading ? "..." : medicalHistory.length}
+            color={theme.palette.warning.main}
+            onArrowClick={handleViewMedicalHistory}
+          />
+        </Grid>
+        <Grid item xs={12} md={3}>
+          <StatCard 
+            icon={DescriptionIcon}
+            title="Health Reports"
+            value={loading ? "..." : reports.length}
             color={theme.palette.info.main}
+            onArrowClick={handleViewReports}
           />
         </Grid>
 
@@ -315,8 +370,173 @@ const Dashboard = () => {
           <AppointmentsPage />
         </DialogContent>
       </Dialog>
+      
+      {/* Medical History Dialog */}
+      <Dialog
+        open={medicalHistoryDialogOpen}
+        onClose={handleCloseMedicalHistoryDialog}
+        maxWidth="md"
+        fullWidth
+        TransitionComponent={Transition}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            bgcolor: theme.palette.warning.main,
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            py: 2
+          }}
+        >
+          <Typography variant="h6">Medical History</Typography>
+          <IconButton
+            size="small"
+            onClick={handleCloseMedicalHistoryDialog}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {medicalHistory.length > 0 ? (
+            <List>
+              {medicalHistory.map((item, index) => (
+                <ListItem key={index} divider={index < medicalHistory.length - 1}>
+                  <ListItemIcon>
+                    <MedicalServicesIcon color="warning" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={item.condition}
+                    secondary={
+                      <>
+                        <Typography variant="body2" component="span" color="text.secondary">
+                          Diagnosed: {new Date(item.diagnosedDate).toLocaleDateString()}
+                        </Typography>
+                        <br />
+                        <Typography variant="body2" component="span" color="text.secondary">
+                          Medications: {item.medications.join(', ')}
+                        </Typography>
+                        {item.notes && (
+                          <>
+                            <br />
+                            <Typography variant="body2" component="span" color="text.secondary">
+                              Notes: {item.notes}
+                            </Typography>
+                          </>
+                        )}
+                      </>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Box p={3} textAlign="center">
+              <Typography variant="body1" color="text.secondary">
+                No medical history records found.
+              </Typography>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseMedicalHistoryDialog} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
+      
+      {/* Health Reports Dialog */}
+      <Dialog
+        open={reportsDialogOpen}
+        onClose={handleCloseReportsDialog}
+        maxWidth="md"
+        fullWidth
+        TransitionComponent={Transition}
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle
+          sx={{
+            bgcolor: theme.palette.info.main,
+            color: 'white',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            py: 2
+          }}
+        >
+          <Typography variant="h6">Health Reports</Typography>
+          <IconButton
+            size="small"
+            onClick={handleCloseReportsDialog}
+            sx={{ color: 'white' }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          {reports.length > 0 ? (
+            <List>
+              {reports.map((report) => (
+                <ListItem key={report.id} divider>
+                  <ListItemIcon>
+                    <DescriptionIcon color="info" />
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={report.name}
+                    secondary={
+                      <>
+                        <Typography variant="body2" component="span" color="text.secondary">
+                          Date: {new Date(report.date).toLocaleDateString()}
+                        </Typography>
+                        <br />
+                        <Typography variant="body2" component="span" color="text.secondary">
+                          Type: {report.type}
+                        </Typography>
+                      </>
+                    }
+                  />
+                </ListItem>
+              ))}
+            </List>
+          ) : (
+            <Box p={3} textAlign="center">
+              <Typography variant="body1" color="text.secondary">
+                No health reports found.
+              </Typography>
+            </Box>
+          )}
+          <Box mt={3} textAlign="center">
+            <Button 
+              component={Link} 
+              to="/report-summarizer" 
+              variant="contained" 
+              color="info"
+              startIcon={<UploadIcon />}
+            >
+              Upload New Report
+            </Button>
+          </Box>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={handleCloseReportsDialog} color="primary">
+            Close
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Container>
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

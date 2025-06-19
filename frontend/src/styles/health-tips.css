@@ -1,0 +1,33 @@
+/* Health Tips Styles */
+.health-tips-section {
+  padding: 2rem 0;
+  background-color: var(--bg-color);
+  position: relative;
+}
+
+/* Pulse animation for the health tip icon */
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.health-tip-icon {
+  animation: pulse 2s infinite ease-in-out;
+}
+
+/* Responsive styles */
+@media (max-width: 600px) {
+  .health-tips-section {
+    padding: 1.5rem 0;
+  }
+}

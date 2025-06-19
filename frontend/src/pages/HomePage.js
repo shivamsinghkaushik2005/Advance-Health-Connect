@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Box, Typography, Button, Container, Grid, Paper } from '@mui/material';
 import { Link } from 'react-router-dom';
 import EmergencySOS from '../components/EmergencySOS';
+import HealthTips from '../components/HealthTips';
 import '../styles/HomePage.css';
 
 const HomePage = () => {
@@ -181,6 +182,15 @@ const HomePage = () => {
           >
             {t('home.signupNow')}
           </Button>
+        </Container>
+      </section>
+
+      {/* Health Tips Section */}
+      <section className="health-tips-section">
+        <Container maxWidth="lg">
+          <Box sx={{ my: 4 }}>
+            <HealthTips />
+          </Box>
         </Container>
       </section>
     </div>

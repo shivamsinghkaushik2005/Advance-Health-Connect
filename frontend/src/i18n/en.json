@@ -1,7 +1,8 @@
 {
   "app": {
     "name": "Health Connect",
-    "tagline": "Healthcare at your fingertips"
+    "tagline": "Healthcare at your fingertips",
+    "selectLanguage": "Select Language"
   },
   "nav": {
     "home": "Home",
