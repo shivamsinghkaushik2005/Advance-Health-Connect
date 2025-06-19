@@ -2,6 +2,7 @@ import { Server } from 'socket.io';
 import jwt from 'jsonwebtoken';
 import ChatMessage from './models/ChatMessage.js';
 import User from './models/User.js';
+import config from './config/env.js';
 
 // Map to store online users
 const onlineUsers = new Map();
@@ -9,7 +10,7 @@ const onlineUsers = new Map();
 const setupSocketServer = (server) => {
   const io = new Server(server, {
     cors: {
-      origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+      origin: process.env.CORS_ORIGIN || config.CORS_ORIGIN,
       methods: ['GET', 'POST'],
       credentials: true
     }
@@ -26,7 +27,7 @@ const setupSocketServer = (server) => {
       // Verify token
       const decoded = jwt.verify(
         token,
-        process.env.JWT_SECRET || 'your_jwt_secret_key_here'
+        process.env.JWT_SECRET || config.JWT_SECRET
       );
 
       // Find user
@@ -178,4 +179,4 @@ const setupSocketServer = (server) => {
   return io;
 };
 
-export default setupSocketServer; 
+export default setupSocketServer;

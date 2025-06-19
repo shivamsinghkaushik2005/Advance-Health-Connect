@@ -1,0 +1,311 @@
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import jwt from 'jsonwebtoken';
+import User from '../models/User.js';
+import Doctor from '../models/Doctor.js';
+import config from '../config/env.js';
+import { protect } from '../middlewares/authMiddleware.js';
+
+const router = express.Router();
+
+// @desc    Register a new user
+// @route   POST /api/auth/register
+// @access  Public
+router.post('/register', async (req, res) => {
+  try {
+    const { name, email, password, phoneNumber, userType, doctorData } = req.body;
+
+    // Validate input
+    if (!name || !email || !password || !phoneNumber || !userType) {
+      return res.status(400).json({ message: 'Please enter all fields' });
+    }
+
+    // Additional validation for doctor registration
+    if (userType === 'doctor') {
+      if (!doctorData || !doctorData.speciality || !doctorData.licenseNumber || !doctorData.fees) {
+        return res.status(400).json({ message: 'All doctor information is required' });
+      }
+    }
+
+    // Check for existing user
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create salt & hash
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Create user
+    const user = new User({
+      name,
+      email,
+      password: hashedPassword,
+      phoneNumber,
+      userType
+    });
+
+    const savedUser = await user.save();
+
+    // Create doctor profile if user type is doctor
+    if (savedUser && savedUser.userType === 'doctor' && doctorData) {
+      try {
+        await Doctor.create({
+          userId: savedUser._id,
+          speciality: doctorData.speciality,
+          licenseNumber: doctorData.licenseNumber,
+          fees: doctorData.fees,
+          education: doctorData.education || [],
+          experience: doctorData.experience || [],
+          languages: doctorData.languages || ['English'],
+          availability: doctorData.availability || [
+            {
+              day: 'Monday',
+              slots: [
+                {
+                  startTime: '09:00',
+                  endTime: '17:00',
+                  isBooked: false
+                }
+              ]
+            }
+          ],
+          isVerified: false,
+          status: 'pending'
+        });
+      } catch (doctorError) {
+        // If doctor profile creation fails, delete the user and throw error
+        await User.findByIdAndDelete(savedUser._id);
+        throw new Error('Failed to create doctor profile: ' + doctorError.message);
+      }
+    }
+
+    // Create token
+    const token = jwt.sign(
+      { id: savedUser._id },
+      config.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // Send response
+    res.status(201).json({
+      token,
+      user: {
+        _id: savedUser._id,
+        name: savedUser.name,
+        email: savedUser.email,
+        phoneNumber: savedUser.phoneNumber,
+        userType: savedUser.userType
+      }
+    });
+  } catch (err) {
+    console.error('Registration error:', err);
+    res.status(500).json({ message: 'Server error during registration' });
+  }
+});
+
+// @desc    Login user
+// @route   POST /api/auth/login
+// @access  Public
+router.post('/login', async (req, res) => {
+  try {
+    console.log('Login attempt received:', req.body);
+    const { email, password } = req.body;
+
+    // Validate input
+    if (!email || !password) {
+      console.log('Login failed: Missing email or password');
+      return res.status(400).json({ message: 'Please enter all fields' });
+    }
+
+    // Check for existing user
+    console.log('Searching for user with email:', email);
+    const user = await User.findOne({ email });
+    if (!user) {
+      console.log('Login failed: User not found with email:', email);
+      return res.status(400).json({ message: 'User does not exist' });
+    }
+    console.log('User found:', user._id);
+    console.log('User details:', {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      userType: user.userType,
+      passwordLength: user.password ? user.password.length : 0
+    });
+
+    // Validate password using the User model's matchPassword method
+    console.log('Validating password for user:', user._id);
+    console.log('Password from request:', password);
+    console.log('Stored password hash:', user.password);
+    
+    // Try direct bcrypt compare first for debugging
+    try {
+      console.log('Attempting direct bcrypt compare...');
+      const directCompare = await bcrypt.compare(password, user.password);
+      console.log('Direct bcrypt compare result:', directCompare);
+    } catch (bcryptError) {
+      console.error('Error in direct bcrypt compare:', bcryptError);
+    }
+    
+    // Now try the model method
+    console.log('Attempting model matchPassword method...');
+    const isMatch = await user.matchPassword(password);
+    console.log('Password validation result:', isMatch);
+    
+    if (!isMatch) {
+      console.log('Login failed: Invalid password for user:', user._id);
+      return res.status(400).json({ message: 'Invalid credentials' });
+    }
+
+    // Create token
+    const token = jwt.sign(
+      { id: user._id },
+      config.JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    // If user is a doctor, get doctor profile
+    let doctorData = null;
+    if (user.userType === 'doctor') {
+      doctorData = await Doctor.findOne({ userId: user._id });
+      
+      // If no doctor profile exists, create one
+      if (!doctorData) {
+        doctorData = await Doctor.create({
+          userId: user._id,
+          speciality: '',
+          licenseNumber: '',
+          fees: 0,
+          education: [],
+          experience: [],
+          languages: ['English'],
+          availability: [{
+            day: 'Monday',
+            slots: [{
+              startTime: '09:00',
+              endTime: '17:00'
+            }]
+          }],
+          isVerified: false,
+          status: 'pending'
+        });
+      }
+    }
+
+    console.log('Login successful, sending response...');
+    // Send response
+    res.json({
+      token,
+      user: {
+        _id: user._id,
+        name: user.name,
+        email: user.email,
+        phoneNumber: user.phoneNumber,
+        userType: user.userType,
+        ...(doctorData && {
+          doctorProfile: {
+            _id: doctorData._id,
+            speciality: doctorData.speciality,
+            licenseNumber: doctorData.licenseNumber,
+            fees: doctorData.fees,
+            education: doctorData.education,
+            experience: doctorData.experience,
+            languages: doctorData.languages,
+            availability: doctorData.availability,
+            isVerified: doctorData.isVerified,
+            status: doctorData.status
+          }
+        })
+      }
+    });
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ message: 'Server error during login' });
+  }
+});
+
+// @desc    Get user data
+// @route   GET /api/auth/user
+// @access  Private
+router.get('/user', protect, async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(user);
+  } catch (err) {
+    console.error('Error fetching user:', err);
+    res.status(500).json({ message: 'Server error while fetching user data' });
+  }
+});
+
+// @desc    Get current user profile
+// @route   GET /api/auth/profile
+// @access  Private
+router.get('/profile', protect, async (req, res) => {
+  try {
+    // Get user from database (already verified by auth middleware)
+    const user = await User.findById(req.user._id).select('-password');
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Return user data wrapped in a user object
+    res.json({ user });
+  } catch (error) {
+    console.error('Profile fetch error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// @desc    Update user profile
+// @route   PUT /api/auth/profile
+// @access  Private
+router.put('/profile', protect, async (req, res) => {
+  try {
+    // Get user from database (already verified by auth middleware)
+    const user = await User.findById(req.user._id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Update user fields
+    const { name, email, phoneNumber, age, gender, address, pincode, profileImage } = req.body;
+    
+    if (name) user.name = name;
+    if (email) user.email = email;
+    if (phoneNumber) user.phoneNumber = phoneNumber;
+    if (age) user.age = age;
+    if (gender) user.gender = gender;
+    if (address) user.address = address;
+    if (pincode) user.pincode = pincode;
+    if (profileImage) user.profileImage = profileImage;
+    
+    // Save updated user
+    const updatedUser = await user.save();
+    
+    // Return updated user data (excluding password)
+    res.json({
+      _id: updatedUser._id,
+      name: updatedUser.name,
+      email: updatedUser.email,
+      phoneNumber: updatedUser.phoneNumber,
+      age: updatedUser.age,
+      gender: updatedUser.gender,
+      address: updatedUser.address,
+      pincode: updatedUser.pincode,
+      profileImage: updatedUser.profileImage,
+      userType: updatedUser.userType
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+export default router;

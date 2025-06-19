@@ -1,7 +1,7 @@
 import express from 'express';
 import Doctor from '../models/Doctor.js';
 import User from '../models/User.js';
-import auth from '../middleware/auth.js';
+import { protect } from '../middlewares/authMiddleware.js';
 import { doctorImageUpload } from '../utils/uploadConfig.js';
 
 const router = express.Router();
@@ -9,7 +9,7 @@ const router = express.Router();
 // @desc    Get doctor profile by userId
 // @route   GET /api/doctors/profile/:userId
 // @access  Private
-router.get('/profile/:userId', auth, async (req, res) => {
+router.get('/profile/:userId', protect, async (req, res) => {
   try {
     console.log('Debug - Finding doctor profile for userId:', req.params.userId);
     
@@ -121,7 +121,7 @@ router.get('/', async (req, res) => {
 // @desc    Get doctor by ID
 // @route   GET /api/doctors/:id
 // @access  Private
-router.get('/:id', auth, async (req, res) => {
+router.get('/:id', protect, async (req, res) => {
   try {
     // Find doctor profile directly using the doctor's ID
     const doctor = await Doctor.findById(req.params.id)
@@ -205,7 +205,7 @@ router.post('/', async (req, res) => {
 // @desc    Update doctor profile
 // @route   PUT /api/doctors/:id
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', protect, async (req, res) => {
   try {
     // Check if user exists and is a doctor
     const user = await User.findById(req.params.id);
@@ -285,7 +285,7 @@ router.put('/:id/verify', async (req, res) => {
 // @desc    Upload doctor profile image
 // @route   POST /api/doctors/:id/upload-image
 // @access  Private
-router.post('/:id/upload-image', auth, doctorImageUpload.single('image'), async (req, res) => {
+router.post('/:id/upload-image', protect, doctorImageUpload.single('image'), async (req, res) => {
   try {
     const doctor = await Doctor.findById(req.params.id);
     
@@ -318,4 +318,4 @@ router.post('/:id/upload-image', auth, doctorImageUpload.single('image'), async 
   }
 });
 
-export default router; 
+export default router;

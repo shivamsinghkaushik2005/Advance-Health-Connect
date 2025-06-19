@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import {
@@ -11,13 +11,14 @@ import {
   Grid,
   Divider,
   Alert,
+  CircularProgress
 } from '@mui/material';
 import useAuth from '../hooks/useAuth';
 
 const LoginPage = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   
   const [formData, setFormData] = useState({
     email: '',
@@ -27,23 +28,71 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
+  // Clear form data when component mounts
+  useEffect(() => {
+    setFormData({
+      email: '',
+      password: '',
+    });
+    setError('');
+    
+    // Check if user is already authenticated
+    if (isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, navigate]);
+  
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData({
       ...formData,
       [name]: value,
     });
+    // Clear error when user starts typing again
+    if (error) setError('');
+  };
+  
+  const validateForm = () => {
+    if (!formData.email || !formData.password) {
+      setError('Please enter both email and password');
+      return false;
+    }
+    
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(formData.email)) {
+      setError('Please enter a valid email address');
+      return false;
+    }
+    
+    // Password length validation
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      return false;
+    }
+    
+    return true;
   };
   
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
+    
+    // Validate form before submission
+    if (!validateForm()) {
+      return;
+    }
+    
     setLoading(true);
     
     try {
       console.log('Attempting login...');
+      
+      // Trim email to prevent whitespace issues
+      const trimmedEmail = formData.email.trim();
+      
       // Login the user
-      const response = await login(formData.email, formData.password);
+      const response = await login(trimmedEmail, formData.password);
       console.log('Login successful:', response);
       
       // Redirect based on user type
@@ -56,7 +105,25 @@ const LoginPage = () => {
       }
     } catch (err) {
       console.error('Login error:', err);
-      setError(err.response?.data?.message || 'Invalid email or password');
+      
+      // More detailed error handling
+      if (err.response?.status === 400) {
+        setError(err.response?.data?.message || 'Invalid credentials');
+      } else if (err.response?.status === 401) {
+        setError('Invalid credentials. Please check your email and password.');
+      } else if (err.response?.status === 404) {
+        setError('User not found. Please check your email or register a new account.');
+      } else if (err.response?.status === 500) {
+        setError('Server error. Please try again later.');
+      } else {
+        setError('Login failed. Please check your credentials and try again.');
+      }
+      
+      // Clear password field on error
+      setFormData({
+        ...formData,
+        password: ''
+      });
     } finally {
       setLoading(false);
     }
@@ -87,6 +154,13 @@ const LoginPage = () => {
             onChange={handleChange}
             required
             margin="normal"
+            autoComplete="email"
+            error={!!error}
+            disabled={loading}
+            inputProps={{
+              autoCapitalize: 'none',
+              autoCorrect: 'off'
+            }}
           />
           
           <TextField
@@ -98,6 +172,9 @@ const LoginPage = () => {
             onChange={handleChange}
             required
             margin="normal"
+            autoComplete="current-password"
+            error={!!error}
+            disabled={loading}
           />
           
           <Button
@@ -106,10 +183,14 @@ const LoginPage = () => {
             variant="contained"
             color="primary"
             size="large"
-            disabled={loading}
             sx={{ mt: 3, mb: 2 }}
+            disabled={loading}
           >
-            {loading ? t('common.loading') : t('auth.loginButton')}
+            {loading ? (
+              <CircularProgress size={24} color="inherit" />
+            ) : (
+              t('auth.loginButton')
+            )}
           </Button>
         </form>
         
@@ -134,4 +215,4 @@ const LoginPage = () => {
   );
 };
 
-export default LoginPage; 
+export default LoginPage;

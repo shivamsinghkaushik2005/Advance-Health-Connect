@@ -2,7 +2,6 @@ import express from 'express';
 import Appointment from '../models/Appointment.js';
 import Doctor from '../models/Doctor.js';
 import { sendAppointmentConfirmationEmail } from '../utils/emailService.js';
-import auth from '../middleware/auth.js';
 import User from '../models/User.js';
 import { protect, authorize } from '../middlewares/authMiddleware.js';
 
@@ -14,7 +13,7 @@ router.use(protect);
 // @desc    Get all appointments for current user (either patient or doctor)
 // @route   GET /api/appointments
 // @access  Private
-router.get('/', auth, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
     let appointments;
     const userId = req.user._id;
@@ -96,7 +95,7 @@ router.get('/', auth, async (req, res) => {
 // @desc    Book a new appointment
 // @route   POST /api/appointments
 // @access  Private (Patient)
-router.post('/', auth, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     const { doctorId, appointmentDate, startTime, endTime, symptoms, notes } = req.body;
     
@@ -179,7 +178,7 @@ router.post('/', auth, async (req, res) => {
 // @desc    Get all appointments for a patient
 // @route   GET /api/appointments/patient
 // @access  Private (Patient)
-router.get('/patient', auth, async (req, res) => {
+router.get('/patient', async (req, res) => {
   try {
     const appointments = await Appointment.find({ patientId: req.user._id })
       .populate({
@@ -201,7 +200,7 @@ router.get('/patient', auth, async (req, res) => {
 // @desc    Get all appointments for a doctor with patient details
 // @route   GET /api/appointments/doctor/:doctorId
 // @access  Private
-router.get('/doctor/:doctorId', auth, async (req, res) => {
+router.get('/doctor/:doctorId', async (req, res) => {
   try {
     console.log('Debug - Fetching appointments for doctor ID:', req.params.doctorId);
     
@@ -252,7 +251,7 @@ router.get('/doctor/:doctorId', auth, async (req, res) => {
 // @desc    Update appointment
 // @route   PUT /api/appointments/:id
 // @access  Private
-router.put('/:id', auth, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const { status } = req.body;
     
@@ -406,4 +405,42 @@ router.put('/:id/payment', async (req, res) => {
   }
 });
 
-export default router; 
+// @desc    Add or update meeting link for video consultation
+// @route   PUT /api/appointments/:id/meeting-link
+// @access  Private (Doctor only)
+router.put('/:id/meeting-link', async (req, res) => {
+  try {
+    const { meetingLink } = req.body;
+    
+    if (!meetingLink) {
+      return res.status(400).json({ message: 'Meeting link is required' });
+    }
+    
+    const appointment = await Appointment.findById(req.params.id);
+    
+    if (!appointment) {
+      return res.status(404).json({ message: 'Appointment not found' });
+    }
+    
+    // Only doctors can add meeting links
+    if (req.user.userType !== 'doctor') {
+      return res.status(403).json({ message: 'Not authorized' });
+    }
+    
+    // Verify this doctor is assigned to this appointment
+    const doctor = await Doctor.findOne({ userId: req.user._id });
+    if (!doctor || appointment.doctorId.toString() !== doctor._id.toString()) {
+      return res.status(403).json({ message: 'Not authorized to update this appointment' });
+    }
+    
+    appointment.meetingLink = meetingLink;
+    await appointment.save();
+    
+    res.json(appointment);
+  } catch (error) {
+    console.error('Error updating meeting link:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+export default router;

@@ -5,9 +5,15 @@ import CssBaseline from '@mui/material/CssBaseline';
 import useAuth from './hooks/useAuth';
 import { Box, CircularProgress } from '@mui/material';
 
+
+
+
+
 // Layout Components
 import Header from './components/layout/Header';
 import Footer from './components/layout/Footer';
+import Chatbot from './components/Chatbot';
+
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -21,6 +27,9 @@ import HealthCampsPage from './pages/HealthCampsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import Dashboard from './pages/Dashboard';
 import DoctorDashboardPage from './pages/DoctorDashboardPage';
+import UploadReportPage from './pages/UploadReportPage';
+
+
 
 // Protected Route Component
 const ProtectedRoute = ({ children }) => {
@@ -154,6 +163,8 @@ function App() {
       <main className="main-content">
         <Routes>
           <Route path="/" element={<HomePage />} />
+         <Route path="/report-summarizer" element={<UploadReportPage />} />
+
           <Route 
             path="/login" 
             element={
@@ -229,6 +240,7 @@ function App() {
         </Routes>
       </main>
       <Footer />
+      <Chatbot />
     </ThemeProvider>
   );
 }

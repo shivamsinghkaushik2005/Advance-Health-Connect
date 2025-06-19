@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import {
@@ -23,7 +23,9 @@ import {
   ListItemAvatar,
   ListItemSecondary,
   Divider,
-  useTheme
+  useTheme,
+  Snackbar,
+  Tooltip
 } from '@mui/material';
 import {
   Event as EventIcon,
@@ -33,7 +35,10 @@ import {
   Send as SendIcon,
   CheckCircle as CheckCircleIcon,
   Cancel as CancelIcon,
-  Schedule as ScheduleIcon
+  Schedule as ScheduleIcon,
+  Videocam as VideocamIcon,
+  ContentCopy as ContentCopyIcon,
+  Add as AddIcon
 } from '@mui/icons-material';
 import { format } from 'date-fns';
 import useAuth from '../hooks/useAuth';
@@ -52,6 +57,13 @@ const AppointmentsPage = () => {
   const [message, setMessage] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
   const [chatLoading, setChatLoading] = useState(false);
+  const [videoDialogOpen, setVideoDialogOpen] = useState(false);
+  const [selectedAppointmentForVideo, setSelectedAppointmentForVideo] = useState(null);
+  const [meetingLink, setMeetingLink] = useState('');
+  const [meetingLinkLoading, setMeetingLinkLoading] = useState(false);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const messagesEndRef = useRef(null);
 
   useEffect(() => {
     const fetchAppointments = async () => {
@@ -93,6 +105,65 @@ const AppointmentsPage = () => {
     setChatOpen(false);
     setSelectedAppointment(null);
     setMessage('');
+  };
+
+  const openVideoDialog = (appointment) => {
+    setSelectedAppointment(appointment);
+    setMeetingLink(appointment.meetingLink || '');
+    setVideoDialogOpen(true);
+  };
+
+  const closeVideoDialog = () => {
+    setVideoDialogOpen(false);
+    setSelectedAppointment(null);
+    setMeetingLink('');
+  };
+
+  const createMeetingLink = async () => {
+    if (!selectedAppointment) return;
+    
+    try {
+      setMeetingLinkLoading(true);
+      // Generate a random meeting ID for Jitsi Meet
+      const randomMeetingId = `healthconnect-${Math.random().toString(36).substring(2, 15)}`;
+      const newMeetingLink = `https://meet.jit.si/${randomMeetingId}`;
+      
+      // Save the meeting link to the appointment
+      const response = await axios.put(`/api/appointments/${selectedAppointment._id}/meeting-link`, {
+        meetingLink: newMeetingLink
+      });
+      
+      setMeetingLink(newMeetingLink);
+      setSnackbarMessage(t('appointments.meetingLinkCreated'));
+      setSnackbarOpen(true);
+      
+      // Update the appointment in the local state
+      setAppointments(appointments.map(app => 
+        app._id === selectedAppointment._id ? { ...app, meetingLink: newMeetingLink } : app
+      ));
+      setSelectedAppointment({ ...selectedAppointment, meetingLink: newMeetingLink });
+      
+      setMeetingLinkLoading(false);
+    } catch (err) {
+      console.error('Failed to create meeting link', err);
+      setSnackbarMessage(t('appointments.meetingLinkError'));
+      setSnackbarOpen(true);
+      setMeetingLinkLoading(false);
+    }
+  };
+
+  const copyMeetingLink = () => {
+    if (meetingLink) {
+      navigator.clipboard.writeText(meetingLink);
+      setSnackbarMessage(t('appointments.meetingLinkCopied'));
+      setSnackbarOpen(true);
+    }
+  };
+
+  const joinVideoCall = () => {
+    if (meetingLink) {
+      window.open(meetingLink, '_blank');
+    }
   };
 
   const sendMessage = async () => {
@@ -229,7 +300,24 @@ const AppointmentsPage = () => {
                           }
                         }}
                       >
-                        Chat with Doctor
+                        {t('appointments.chat')}
+                      </Button>
+                      
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        startIcon={<VideocamIcon />}
+                        onClick={() => openVideoDialog(appointment)}
+                        sx={{
+                          borderColor: theme.palette.success.main,
+                          color: theme.palette.success.main,
+                          '&:hover': {
+                            borderColor: theme.palette.success.dark,
+                            bgcolor: `${theme.palette.success.main}10`
+                          }
+                        }}
+                      >
+                        {t('appointments.videoConsultation')}
                       </Button>
                     </Box>
                   </Box>
@@ -383,8 +471,123 @@ const AppointmentsPage = () => {
           </Box>
         </DialogContent>
       </Dialog>
+
+      {/* Video Consultation Dialog */}
+      <Dialog
+        open={videoDialogOpen}
+        onClose={closeVideoDialog}
+        maxWidth="sm"
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: 2,
+            overflow: 'hidden'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          bgcolor: theme.palette.success.main, 
+          color: 'white',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between'
+        }}>
+          {t('appointments.videoConsultation')}
+          <IconButton size="small" onClick={closeVideoDialog} sx={{ color: 'white' }}>
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent sx={{ p: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            {user?.userType === 'doctor' && (
+              <Box>
+                <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
+                  {t('appointments.createMeetingLink')}
+                </Typography>
+                <Box display="flex" gap={1} mt={1}>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<AddIcon />}
+                    onClick={createMeetingLink}
+                    disabled={meetingLinkLoading}
+                  >
+                    {meetingLinkLoading ? (
+                      <CircularProgress size={24} color="inherit" />
+                    ) : (
+                      t('appointments.createMeetingLink')
+                    )}
+                  </Button>
+                </Box>
+              </Box>
+            )}
+            
+            {meetingLink ? (
+              <Box>
+                <Typography variant="subtitle1" fontWeight="medium" gutterBottom>
+                  {t('appointments.joinVideoCall')}
+                </Typography>
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 1,
+                  p: 2,
+                  bgcolor: 'background.paper',
+                  border: `1px solid ${theme.palette.divider}`,
+                  borderRadius: 1
+                }}>
+                  <Typography 
+                    variant="body2" 
+                    sx={{ 
+                      flex: 1,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis'
+                    }}
+                  >
+                    {meetingLink}
+                  </Typography>
+                  <Tooltip title={t('appointments.copyMeetingLink')}>
+                    <IconButton onClick={copyMeetingLink} size="small">
+                      <ContentCopyIcon fontSize="small" />
+                    </IconButton>
+                  </Tooltip>
+                </Box>
+                <Box display="flex" justifyContent="center" mt={3}>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    size="large"
+                    startIcon={<VideocamIcon />}
+                    onClick={joinVideoCall}
+                    sx={{ px: 4 }}
+                  >
+                    {t('appointments.joinVideoCall')}
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <Box sx={{ textAlign: 'center', py: 3 }}>
+                <Typography color="text.secondary">
+                  {user?.userType === 'doctor' 
+                    ? t('appointments.createMeetingLink')
+                    : t('appointments.noMeetingLink')}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        </DialogContent>
+      </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={4000}
+        onClose={() => setSnackbarOpen(false)}
+        message={snackbarMessage}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      />
     </Box>
   );
 };
 
-export default AppointmentsPage; 
+export default AppointmentsPage;

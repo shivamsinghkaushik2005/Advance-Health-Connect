@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import http from 'http';
+// Import middleware
 import { protect } from './middlewares/authMiddleware.js';
 
 // Import database connection
@@ -37,6 +38,7 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
+
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(morgan('dev'));
@@ -56,6 +58,9 @@ import chatRoutes from './routes/chatRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import healthCampRoutes from './routes/healthCampRoutes.js';
+import aiChatRoutes from './routes/AiChatRoutes.js';
+import healthReportRoutes from './routes/healthReportRoutes.js';
+
 
 // Use Routes
 app.use('/api/users', userRoutes);
@@ -66,10 +71,13 @@ app.use('/api/chat', protect, chatRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/payments', protect, paymentRoutes);
 app.use('/api/health-camps', healthCampRoutes);
+app.use('/api/ai-chat', aiChatRoutes);
+app.use('/api/health-report', healthReportRoutes);
+
 
 // Health Check API
 app.get('/api/health', (req, res) => {
-  res.status(200).json({ 
+  res.status(200).json({
     message: 'Server is healthy',
     version: '1.1.0',
     features: [
@@ -94,7 +102,7 @@ app.get('/', (req, res) => {
 // Serve frontend in production
 if (process.env.NODE_ENV === 'production') {
   app.use(express.static(path.join(__dirname, '../frontend/build')));
-  
+
   app.get('*', (req, res) => {
     res.sendFile(path.resolve(__dirname, '../frontend/build', 'index.html'));
   });
@@ -123,4 +131,8 @@ process.on('unhandledRejection', (err) => {
   server.close(() => {
     process.exit(1);
   });
-}); 
+});
+
+
+
+

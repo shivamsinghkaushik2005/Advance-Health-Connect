@@ -1,0 +1,132 @@
+import mongoose from 'mongoose';
+import bcrypt from 'bcryptjs';
+
+const userSchema = new mongoose.Schema({
+  uid: {
+    type: String,
+    unique: true,
+    sparse: true
+  },
+  phoneNumber: { 
+    type: String, 
+    required: true,
+    unique: true,
+  },
+  name: {
+    type: String,
+    required: true
+  },
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+  },
+  password: {
+    type: String,
+    required: true
+  },
+  userType: { 
+    type: String, 
+    enum: ['patient', 'doctor', 'pharmacy', 'lab'],
+    default: 'patient'
+  },
+  age: String,
+  gender: String,
+  address: String,
+  pincode: String,
+  profileImage: String,
+  medicalHistory: [{
+    condition: String,
+    diagnosedDate: Date,
+    medications: [String],
+    notes: String
+  }],
+  createdAt: { 
+    type: Date, 
+    default: Date.now 
+  },
+  updatedAt: { 
+    type: Date, 
+    default: Date.now 
+  }
+}, {
+  timestamps: true
+});
+
+// Password encryption middleware
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('password')) {
+    console.log('Password not modified, skipping hashing');
+    next();
+    return;
+  }
+
+  try {
+    console.log('Hashing password for user:', this.email);
+    console.log('Original password length:', this.password.length);
+    const salt = await bcrypt.genSalt(10);
+    console.log('Generated salt:', salt);
+    this.password = await bcrypt.hash(this.password, salt);
+    console.log('Hashed password:', this.password);
+    console.log('Hashed password length:', this.password.length);
+    next();
+  } catch (error) {
+    console.error('Error hashing password:', error);
+    console.error('Error details:', JSON.stringify(error));
+    next(error);
+  }
+});
+
+// Method to check if entered password matches stored password
+userSchema.methods.matchPassword = async function(enteredPassword) {
+  try {
+    console.log('=== PASSWORD MATCHING DEBUG ===');
+    console.log('User email:', this.email);
+    console.log('User ID:', this._id);
+    console.log('Entered password:', enteredPassword);
+    console.log('Entered password type:', typeof enteredPassword);
+    console.log('Entered password length:', enteredPassword ? enteredPassword.length : 'undefined/null');
+    console.log('Stored password hash:', this.password);
+    console.log('Stored password type:', typeof this.password);
+    console.log('Stored password length:', this.password ? this.password.length : 'undefined/null');
+    
+    // Check if either password is undefined or null
+    if (!enteredPassword || !this.password) {
+      console.error('ERROR: One of the passwords is undefined or null');
+      return false;
+    }
+    
+    // Try direct bcrypt compare
+    console.log('Attempting bcrypt.compare...');
+    const isMatch = await bcrypt.compare(enteredPassword, this.password);
+    console.log('Password match result:', isMatch);
+    
+    // If match failed, try some diagnostics
+    if (!isMatch) {
+      console.log('Match failed, trying diagnostics...');
+      
+      // Test with a known working password/hash pair
+      const testPassword = 'test123';
+      const testHash = await bcrypt.hash(testPassword, 10);
+      const testMatch = await bcrypt.compare(testPassword, testHash);
+      console.log('Test password/hash match works:', testMatch);
+      
+      // Check if the hash format is valid
+      console.log('Hash format check - should start with $2a$ or $2b$:', 
+                 this.password.startsWith('$2a$') || this.password.startsWith('$2b$'));
+    }
+    
+    console.log('=== END PASSWORD MATCHING DEBUG ===');
+    return isMatch;
+  } catch (error) {
+    console.error('Error comparing passwords:', error);
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    return false;
+  }
+};
+
+const User = mongoose.model('User', userSchema);
+
+export default User;

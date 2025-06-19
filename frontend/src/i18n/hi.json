@@ -66,19 +66,31 @@
     "other": "अन्य"
   },
   "appointments": {
-    "title": "मेरे अपॉइंटमेंट",
+    "title": "मेरी अपॉइंटमेंट",
     "newAppointment": "नया अपॉइंटमेंट",
     "upcoming": "आगामी",
-    "past": "पिछले",
+    "past": "पिछली",
     "date": "तारीख",
     "time": "समय",
     "doctor": "डॉक्टर",
+    "patient": "मरीज",
+    "symptoms": "लक्षण",
+    "notes": "नोट्स",
     "status": "स्थिति",
     "actions": "कार्रवाई",
     "viewDetails": "विवरण देखें",
-    "cancel": "रद्द करें",
+    "cancel": "अपॉइंटमेंट रद्द करें",
     "reschedule": "पुनर्निर्धारित करें",
+    "chat": "डॉक्टर से चैट करें",
     "join": "वीडियो कॉल में शामिल हों",
+    "startVideoCall": "वीडियो कॉल शुरू करें",
+    "joinVideoCall": "वीडियो कॉल में शामिल हों",
+    "videoConsultation": "वीडियो परामर्श",
+    "createMeetingLink": "मीटिंग लिंक बनाएं",
+    "meetingLinkCreated": "मीटिंग लिंक सफलतापूर्वक बनाई गई",
+    "meetingLinkError": "मीटिंग लिंक बनाने में त्रुटि",
+    "copyMeetingLink": "मीटिंग लिंक कॉपी करें",
+    "meetingLinkCopied": "मीटिंग लिंक क्लिपबोर्ड पर कॉपी की गई",
     "noAppointments": "कोई अपॉइंटमेंट नहीं मिला"
   },
   "doctors": {
@@ -144,4 +156,4 @@
     "terms": "शर्तें",
     "privacy": "गोपनीयता"
   }
-} 
+}

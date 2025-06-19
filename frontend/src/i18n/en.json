@@ -79,6 +79,18 @@
     "cancel": "Cancel",
     "reschedule": "Reschedule",
     "join": "Join Video Call",
+    "patient": "Patient",
+    "symptoms": "Symptoms",
+    "notes": "Notes",
+    "chat": "Chat with Doctor",
+    "startVideoCall": "Start Video Call",
+    "joinVideoCall": "Join Video Call",
+    "videoConsultation": "Video Consultation",
+    "createMeetingLink": "Create Meeting Link",
+    "meetingLinkCreated": "Meeting link created successfully",
+    "meetingLinkError": "Error creating meeting link",
+    "copyMeetingLink": "Copy Meeting Link",
+    "meetingLinkCopied": "Meeting link copied to clipboard",
     "noAppointments": "No appointments found"
   },
   "doctors": {
@@ -144,4 +156,4 @@
     "terms": "Terms",
     "privacy": "Privacy"
   }
-} 
+}
