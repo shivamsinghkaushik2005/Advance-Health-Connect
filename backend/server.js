@@ -61,6 +61,7 @@ import healthCampRoutes from './routes/healthCampRoutes.js';
 import aiChatRoutes from './routes/AiChatRoutes.js';
 import healthReportRoutes from './routes/healthReportRoutes.js';
 import availabilityRoutes from './routes/availabilityRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
 
 
 // Use Routes
@@ -75,6 +76,7 @@ app.use('/api/health-camps', healthCampRoutes);
 app.use('/api/ai-chat', aiChatRoutes);
 app.use('/api/health-report', healthReportRoutes);
 app.use('/api/doctors/availability', availabilityRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 
 // Health Check API

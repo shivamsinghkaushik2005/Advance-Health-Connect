@@ -40,7 +40,9 @@ const doctorSchema = new mongoose.Schema({
   }],
   rating: {
     type: Number,
-    default: 0
+    default: 0,
+    min: 0,
+    max: 5
   },
   numberOfReviews: {
     type: Number,
@@ -65,4 +67,4 @@ const doctorSchema = new mongoose.Schema({
 
 const Doctor = mongoose.model('Doctor', doctorSchema);
 
-export default Doctor; 
+export default Doctor;

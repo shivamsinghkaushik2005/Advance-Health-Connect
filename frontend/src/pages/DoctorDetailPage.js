@@ -38,6 +38,8 @@ import PaymentIcon from '@mui/icons-material/Payment';
 import LanguageIcon from '@mui/icons-material/Language';
 import useAuth from '../hooks/useAuth';
 import AppointmentBookingCalendar from '../components/AppointmentBookingCalendar';
+import ReviewForm from '../components/ReviewForm';
+import DoctorReviews from '../components/DoctorReviews';
 
 // Styled components
 const StyledAvatar = styled(Avatar)(({ theme }) => ({
@@ -490,13 +492,35 @@ const DoctorDetailPage = () => {
                     {(doctor.rating || 0).toFixed(1)}
                   </Typography>
                   <Typography variant="body2" color="text.secondary" sx={{ ml: 1 }}>
-                    ({doctor.reviewCount || 0} reviews)
+                    ({doctor.numberOfReviews || 0} {t('common.reviews')})
                   </Typography>
                 </Box>
                 
-                <Alert severity="info">
-                  Patient reviews will be displayed here.
-                </Alert>
+                {/* Review Form for logged-in patients */}
+                {isAuthenticated && user && user.userType === 'patient' && (
+                  <ReviewForm 
+                    doctorId={doctor._id} 
+                    appointmentId={null} // This will be set when coming from appointments page
+                    onReviewSubmitted={() => {
+                      // Refresh doctor data to update rating
+                      const fetchDoctor = async () => {
+                        try {
+                          const response = await axios.get(`/api/doctors/${id}`);
+                          setDoctor(response.data);
+                        } catch (err) {
+                          console.error('Error refreshing doctor details:', err);
+                        }
+                      };
+                      fetchDoctor();
+                    }}
+                  />
+                )}
+                
+                {/* Display Reviews */}
+                <Typography variant="h6" sx={{ mt: 4, mb: 2 }}>
+                  {t('doctors.reviews')}
+                </Typography>
+                <DoctorReviews doctorId={doctor._id} />
               </Box>
             </TabPanel>
           </Paper>

@@ -25,7 +25,8 @@ import {
   Divider,
   useTheme,
   Snackbar,
-  Tooltip
+  Tooltip,
+  Grid
 } from '@mui/material';
 import {
   Event as EventIcon,
@@ -40,6 +41,7 @@ import {
   ContentCopy as ContentCopyIcon,
   Add as AddIcon
 } from '@mui/icons-material';
+import PatientAppointmentCard from '../components/PatientAppointmentCard';
 import { format } from 'date-fns';
 import useAuth from '../hooks/useAuth';
 
@@ -228,106 +230,38 @@ const AppointmentsPage = () => {
     if (appointmentList.length === 0) {
       return (
         <Box p={4} textAlign="center">
-          <Typography color="text.secondary">No appointments found</Typography>
+          <Typography color="text.secondary">{t('appointments.noAppointments')}</Typography>
         </Box>
       );
     }
 
     return (
-      <List sx={{ width: '100%', bgcolor: 'background.paper' }}>
-        {appointmentList.map((appointment, index) => (
-          <React.Fragment key={appointment._id}>
-            <ListItem
-              alignItems="flex-start"
-              sx={{
-                py: 2,
-                transition: 'background-color 0.2s',
-                '&:hover': {
-                  bgcolor: 'action.hover'
-                }
+      <Grid container spacing={2} sx={{ p: 2 }}>
+        {appointmentList.map((appointment) => (
+          <Grid item xs={12} sm={6} md={4} key={appointment._id}>
+            <PatientAppointmentCard
+              appointment={appointment}
+              onChatClick={openChat}
+              onVideoClick={openVideoDialog}
+              onReviewSubmitted={() => {
+                // Refresh appointments list after review is submitted
+                const fetchAppointments = async () => {
+                  try {
+                    setLoading(true);
+                    const response = await axios.get('/api/appointments/patient');
+                    setAppointments(response.data);
+                    setLoading(false);
+                  } catch (err) {
+                    setError('Failed to load appointments. Please try again later.');
+                    setLoading(false);
+                  }
+                };
+                fetchAppointments();
               }}
-            >
-              <ListItemAvatar>
-                <Avatar sx={{ bgcolor: getStatusColor(appointment.status) }}>
-                  {getStatusIcon(appointment.status)}
-                </Avatar>
-              </ListItemAvatar>
-              <ListItemText
-                primary={
-                  <Box display="flex" justifyContent="space-between" alignItems="center">
-                    <Typography variant="subtitle1" fontWeight="medium">
-                      Dr. {appointment.doctorId.name}
-                    </Typography>
-                    <Chip
-                      size="small"
-                      label={appointment.status}
-                      sx={{
-                        bgcolor: `${getStatusColor(appointment.status)}15`,
-                        color: getStatusColor(appointment.status),
-                        fontWeight: 500
-                      }}
-                    />
-                  </Box>
-                }
-                secondary={
-                  <Box>
-                    <Box display="flex" alignItems="center" gap={2} mt={1}>
-                      <Box display="flex" alignItems="center">
-                        <EventIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="text.secondary">
-                          {format(new Date(appointment.appointmentDate), 'MMM dd, yyyy')}
-                        </Typography>
-                      </Box>
-                      <Box display="flex" alignItems="center">
-                        <TimeIcon fontSize="small" sx={{ mr: 0.5, color: 'text.secondary' }} />
-                        <Typography variant="body2" color="text.secondary">
-                          {appointment.startTime} - {appointment.endTime}
-                        </Typography>
-                      </Box>
-                    </Box>
-                    <Box display="flex" gap={1} mt={1}>
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<ChatIcon />}
-                        onClick={() => openChat(appointment)}
-                        sx={{
-                          borderColor: theme.palette.primary.main,
-                          color: theme.palette.primary.main,
-                          '&:hover': {
-                            borderColor: theme.palette.primary.dark,
-                            bgcolor: `${theme.palette.primary.main}10`
-                          }
-                        }}
-                      >
-                        {t('appointments.chat')}
-                      </Button>
-                      
-                      <Button
-                        size="small"
-                        variant="outlined"
-                        startIcon={<VideocamIcon />}
-                        onClick={() => openVideoDialog(appointment)}
-                        sx={{
-                          borderColor: theme.palette.success.main,
-                          color: theme.palette.success.main,
-                          '&:hover': {
-                            borderColor: theme.palette.success.dark,
-                            bgcolor: `${theme.palette.success.main}10`
-                          }
-                        }}
-                      >
-                        {t('appointments.videoConsultation')}
-                      </Button>
-                    </Box>
-                  </Box>
-                }
-              />
-            </ListItem>
-            {index < appointmentList.length - 1 && <Divider component="li" />}
-          </React.Fragment>
+            />
+          </Grid>
         ))}
-      </List>
+      </Grid>
     );
   };
 
