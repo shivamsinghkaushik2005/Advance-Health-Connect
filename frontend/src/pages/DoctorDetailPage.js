@@ -37,6 +37,7 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 import PaymentIcon from '@mui/icons-material/Payment';
 import LanguageIcon from '@mui/icons-material/Language';
 import useAuth from '../hooks/useAuth';
+import AppointmentBookingCalendar from '../components/AppointmentBookingCalendar';
 
 // Styled components
 const StyledAvatar = styled(Avatar)(({ theme }) => ({
@@ -443,7 +444,7 @@ const DoctorDetailPage = () => {
             <TabPanel value={tabValue} index={1}>
               <Box p={2}>
                 <Typography variant="h6" color="primary" gutterBottom>
-                  Select Date & Time
+                  Book Your Appointment
                 </Typography>
                 
                 {bookingStatus.error && (
@@ -458,97 +459,25 @@ const DoctorDetailPage = () => {
                   </Alert>
                 )}
                 
-                <Typography variant="subtitle2" gutterBottom>
-                  Step 1: Select Day
+                <Typography variant="body1" paragraph>
+                  Select an available time slot (green) on the calendar below to book your appointment with Dr. {doctor.userId.name}.
                 </Typography>
-                <Box display="flex" flexWrap="wrap" gap={1} mb={3}>
-                  {doctor.availability.map((day) => (
-                    <Chip
-                      key={day.day}
-                      label={day.day}
-                      color={selectedDay === day.day ? "primary" : "default"}
-                      variant={selectedDay === day.day ? "filled" : "outlined"}
-                      onClick={() => handleDaySelect(day.day)}
-                      clickable
-                    />
-                  ))}
-                </Box>
                 
-                <Typography variant="subtitle2" gutterBottom>
-                  Step 2: Select Time Slot
-                </Typography>
-                {selectedDay ? (
-                  <Box display="flex" flexWrap="wrap" mb={3}>
-                    {availableSlots.map((slot, index) => (
-                      <SlotButton
-                        key={index}
-                        variant={selectedSlot === slot ? "contained" : "outlined"}
-                        selected={selectedSlot === slot}
-                        onClick={() => handleSlotSelect(slot)}
-                        disabled={slot.isBooked}
-                        startIcon={<AccessTimeIcon />}
-                      >
-                        {slot.startTime}
-                      </SlotButton>
-                    ))}
-                    {availableSlots.length === 0 && (
-                      <Typography variant="body2" color="text.secondary">
-                        No available slots for this day.
-                      </Typography>
-                    )}
+                <Paper elevation={2} sx={{ p: 2, mb: 3 }}>
+                  <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
+                    <Typography variant="subtitle1">Consultation Fee:</Typography>
+                    <Typography variant="h6" color="primary" fontWeight="bold">
+                      ₹{doctor.fees}
+                    </Typography>
                   </Box>
-                ) : (
-                  <Typography variant="body2" color="text.secondary" mb={3}>
-                    Please select a day first.
-                  </Typography>
-                )}
+                </Paper>
                 
-                <Typography variant="subtitle2" gutterBottom>
-                  Step 3: Appointment Details
-                </Typography>
-                <Grid container spacing={2} mb={3}>
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Symptoms/Reason for Visit"
-                      multiline
-                      rows={3}
-                      name="symptoms"
-                      value={appointmentData.symptoms}
-                      onChange={handleInputChange}
-                    />
-                  </Grid>
-                  
-                  <Grid item xs={12}>
-                    <TextField
-                      fullWidth
-                      label="Additional Notes (Optional)"
-                      multiline
-                      rows={2}
-                      name="notes"
-                      value={appointmentData.notes}
-                      onChange={handleInputChange}
-                    />
-                  </Grid>
-                </Grid>
-                
-                <Box display="flex" justifyContent="space-between" alignItems="center" mb={2}>
-                  <Typography variant="subtitle1">Consultation Fee:</Typography>
-                  <Typography variant="h6" color="primary" fontWeight="bold">
-                    ₹{doctor.fees}
-                  </Typography>
-                </Box>
-                
-                <Button
-                  variant="contained"
-                  color="primary"
-                  fullWidth
-                  size="large"
-                  disabled={!selectedDay || !selectedSlot || bookingStatus.success}
-                  onClick={handleBookAppointment}
-                >
-                  {bookingStatus.success ? "Appointment Booked" : "Book Appointment"}
-                </Button>
+                {/* Calendar Component */}
+                <AppointmentBookingCalendar 
+                  doctorId={doctor._id} 
+                  doctorName={doctor.userId.name}
+                  doctorFees={doctor.fees}
+                />
               </Box>
             </TabPanel>
             
@@ -649,4 +578,4 @@ const DoctorDetailPage = () => {
   );
 };
 
-export default DoctorDetailPage; 
+export default DoctorDetailPage;

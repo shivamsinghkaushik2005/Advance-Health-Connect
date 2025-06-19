@@ -71,6 +71,7 @@ import {
 import { format } from 'date-fns';
 import useAuth from '../hooks/useAuth';
 import DoctorImageUpload from '../components/DoctorImageUpload';
+import DoctorAvailabilityCalendar from '../components/DoctorAvailabilityCalendar';
 
 // Tab Panel Component
 const TabPanel = (props) => {
@@ -248,7 +249,7 @@ const DoctorDashboardPage = () => {
         if (!doctorProfileData.speciality || !doctorProfileData.licenseNumber || doctorProfileData.fees === 0) {
           console.log('Debug - Empty doctor profile, showing edit mode');
           setEditing(true);
-          setTabValue(3); // Switch to profile tab
+          setTabValue(4); // Switch to profile tab (index updated after adding Availability Calendar tab)
           setError('Please complete your profile setup to start accepting appointments.');
           setLoading(false);
           return;
@@ -873,6 +874,7 @@ const DoctorDashboardPage = () => {
                 <Tab label="Today's Appointments" />
                 <Tab label="Upcoming Appointments" />
                 <Tab label="Past Appointments" />
+                <Tab label="Availability Calendar" />
                 <Tab label="Profile" />
               </Tabs>
             </Box>
@@ -893,6 +895,11 @@ const DoctorDashboardPage = () => {
             </TabPanel>
             
             <TabPanel value={tabValue} index={3}>
+              <Typography variant="h6" gutterBottom>Availability Calendar</Typography>
+              <DoctorAvailabilityCalendar doctorId={doctorProfile?._id} />
+            </TabPanel>
+            
+            <TabPanel value={tabValue} index={4}>
               <Typography variant="h6" gutterBottom>Profile</Typography>
               
               {/* Success and Error Messages */}
